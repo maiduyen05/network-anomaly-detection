@@ -1,0 +1,66 @@
+# =====================================
+# Environment and secrets
+# =====================================
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.crt
+*.jks
+*.p12
+
+# =====================================
+# Maven / Java build
+# =====================================
+flink-preprocess/target/
+**/target/
+*.class
+*.jar
+
+# =====================================
+# Python
+# =====================================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+
+# =====================================
+# Large model binaries
+# =====================================
+inference-service/models/*
+!inference-service/models/README.md
+
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.joblib
+*.pkl
+*.tflite
+
+# =====================================
+# Flink runtime
+# =====================================
+runtime/checkpoints/*
+runtime/savepoints/*
+runtime/logs/*
+
+!runtime/checkpoints/.gitkeep
+!runtime/savepoints/.gitkeep
+!runtime/logs/.gitkeep
+
+# =====================================
+# NiFi runtime repositories
+# =====================================
+nifi/database_repository/
+

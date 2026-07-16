@@ -1,0 +1,297 @@
+name: project-a
+
+services:
+  # =========================================================
+  # Apache Kafka - local single-node KRaft cluster
+  # =========================================================
+  kafka:
+    image: ${KAFKA_IMAGE:-apache/kafka:3.8.1}
+    container_name: a-kafka
+    restart: unless-stopped
+
+    ports:
+      - "9092:9092"
+
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_LISTENERS: >-
+        INTERNAL://0.0.0.0:29092,
+        EXTERNAL://0.0.0.0:9092,
+        CONTROLLER://0.0.0.0:9093
+
+      KAFKA_ADVERTISED_LISTENERS: >-
+        INTERNAL://kafka:29092,
+        EXTERNAL://localhost:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >-
+        INTERNAL:PLAINTEXT,
+        EXTERNAL:PLAINTEXT,
+        CONTROLLER:PLAINTEXT
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+    networks:
+      - a-network
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # =========================================================
+  # Apache NiFi - collect data from multiple sources
+  # =========================================================
+  nifi:
+    image: ${NIFI_IMAGE:-apache/nifi:1.28.1}
+    container_name: a-nifi
+    restart: unless-stopped      # Tự khởi động lại khi container nifi bị lỗi
+
+    ports:
+      - "8443:8443"      #https
+
+    environment:
+      SINGLE_USER_CREDENTIALS_USERNAME: ${NIFI_USERNAME:-admin}
+      SINGLE_USER_CREDENTIALS_PASSWORD: ${NIFI_PASSWORD}
+
+      NIFI_WEB_HTTPS_PORT: 8443
+      NIFI_WEB_PROXY_HOST: ${NIFI_WEB_PROXY_HOST:-localhost:8443}
+
+      NIFI_JVM_HEAP_INIT: ${NIFI_JVM_HEAP_INIT:-512m}
+      NIFI_JVM_HEAP_MAX: ${NIFI_JVM_HEAP_MAX:-2g}
+
+    volumes:
+      # Dữ liệu mẫu để NiFi đọc khi test local
+      - ./tests/test-data:/opt/nifi/input:ro
+
+      # Lưu flow và parameter context đã export
+      - ./nifi/flows:/opt/project/nifi/flows
+      - ./nifi/parameter-contexts:/opt/project/nifi/parameter-contexts
+
+      # Kafka topic config và schemas
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
+
+      # Persist trạng thái NiFi
+      - nifi-conf:/opt/nifi/nifi-current/conf
+      - nifi-database:/opt/nifi/nifi-current/database_repository
+      - nifi-flowfile:/opt/nifi/nifi-current/flowfile_repository
+      - nifi-content:/opt/nifi/nifi-current/content_repository
+      - nifi-provenance:/opt/nifi/nifi-current/provenance_repository
+      - nifi-state:/opt/nifi/nifi-current/state
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - a-network
+
+  # =========================================================
+  # Apache Flink JobManager
+  # =========================================================
+  flink-jobmanager:
+    image: ${FLINK_IMAGE:-flink:1.20.1-scala_2.12-java17}
+    container_name: a-flink-jobmanager
+    restart: unless-stopped
+
+    command: jobmanager
+
+    ports:
+      # Flink Web UI
+      - "8081:8081"
+
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        jobmanager.bind-host: 0.0.0.0
+        rest.address: 0.0.0.0
+        rest.bind-address: 0.0.0.0
+        parallelism.default: ${FLINK_PARALLELISM:-1}
+        state.checkpoints.dir: file:///opt/flink/runtime/checkpoints
+        state.savepoints.dir: file:///opt/flink/runtime/savepoints
+
+    volumes:
+      # File JAR được Maven tạo trong target/
+      - ./flink-preprocess/target:/opt/flink/usrlib:ro
+
+      # Config chung và schema dữ liệu
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
+
+      # Trạng thái và log runtime
+      - ./runtime/checkpoints:/opt/flink/runtime/checkpoints
+      - ./runtime/savepoints:/opt/flink/runtime/savepoints
+      - ./runtime/logs:/opt/flink/runtime/logs
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - a-network
+
+  # =========================================================
+  # Apache Flink TaskManager
+  # =========================================================
+  flink-taskmanager:
+    image: ${FLINK_IMAGE:-flink:1.20.1-scala_2.12-java17}
+    container_name: a-flink-taskmanager
+    restart: unless-stopped
+
+    command: taskmanager
+
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.bind-host: 0.0.0.0
+        taskmanager.host: flink-taskmanager
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-2}
+        parallelism.default: ${FLINK_PARALLELISM:-1}
+        state.checkpoints.dir: file:///opt/flink/runtime/checkpoints
+        state.savepoints.dir: file:///opt/flink/runtime/savepoints
+
+    volumes:
+      - ./flink-preprocess/target:/opt/flink/usrlib:ro
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
+      - ./runtime/checkpoints:/opt/flink/runtime/checkpoints
+      - ./runtime/savepoints:/opt/flink/runtime/savepoints
+      - ./runtime/logs:/opt/flink/runtime/logs
+
+    depends_on:
+      - flink-jobmanager
+
+    networks:
+      - a-network
+
+  # =========================================================
+  # Inference service
+  #
+  # Chỉ chạy khi dùng:
+  # docker compose --profile apps up -d
+  # =========================================================
+  inference-service:
+    profiles:
+      - apps
+
+    build:
+      context: ./inference-service
+      dockerfile: Dockerfile
+
+    image: project-a/inference-service:local
+    container_name: a-inference-service
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_INPUT_TOPIC_KEY: processed_network_events
+      KAFKA_OUTPUT_TOPIC_KEY: anomaly_predictions
+
+      TOPICS_CONFIG_PATH: /opt/project/config/kafka/topics.yaml
+      PROCESSED_SCHEMA_PATH: /opt/project/schemas/processed-network-events.schema.json
+      PREDICTION_SCHEMA_PATH: /opt/project/schemas/anomaly-predictions.schema.json
+
+      MODEL_PATH: /models/model.onnx
+
+    ports:
+      - "${INFERENCE_PORT:-8000}:8000"
+
+    volumes:
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
+      - ./inference-service/models:/models:ro
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - a-network
+
+  # =========================================================
+  # NWDAF adapter
+  #
+  # Consume anomaly-predictions, map format and call NWDAF
+  # =========================================================
+  nwdaf-adapter:
+    profiles:
+      - apps
+
+    build:
+      context: ./nwdaf-adapter
+      dockerfile: Dockerfile
+
+    image: project-a/nwdaf-adapter:local
+    container_name: a-nwdaf-adapter
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_INPUT_TOPIC_KEY: anomaly_predictions
+
+      TOPICS_CONFIG_PATH: /opt/project/config/kafka/topics.yaml
+      ADAPTER_CONFIG_PATH: /opt/project/config/nwdaf/adapter-config.yaml
+      PREDICTION_SCHEMA_PATH: /opt/project/schemas/anomaly-predictions.schema.json
+
+    ports:
+      - "${NWDAF_ADAPTER_PORT:-8001}:8001"
+
+    volumes:
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
+
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+    networks:
+      - a-network
+
+# =========================================================
+# Persistent Docker volumes
+# =========================================================
+volumes:
+  kafka-data:
+
+  nifi-conf:
+  nifi-database:
+  nifi-flowfile:
+  nifi-content:
+  nifi-provenance:
+  nifi-state:
+
+# =========================================================
+# Internal Docker network
+# =========================================================
+networks:
+  a-network:
+    name: a-network
+    driver: bridge

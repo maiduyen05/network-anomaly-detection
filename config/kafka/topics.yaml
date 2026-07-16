@@ -1,0 +1,28 @@
+version: 1
+
+bootstrap_servers:
+  internal: kafka:29092
+  external: localhost:9092
+
+defaults:
+  partitions: 1     
+  replication_factor: 1    # Chạy trên local 
+
+topics:
+  raw_network_events:
+    name: raw-network-events
+    producer: nifi
+    consumers:
+      - flink-preprocess
+
+  processed_network_events:
+    name: processed-network-events
+    producer: flink-preprocess
+    consumers:
+      - inference-service
+
+  anomaly_predictions:
+    name: anomaly-predictions
+    producer: inference-service
+    consumers:
+      - nwdaf-adapter
