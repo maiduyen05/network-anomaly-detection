@@ -38,7 +38,7 @@ NWDAF hoặc hệ thống giám sát
 ## 2. Cấu trúc thư mục
  
 ```
-~/projects/A/
+~/projects/vht/
 ├── README.md                  # File bạn đang đọc
 ├── .gitignore
 ├── .env.example                # Mẫu biến môi trường — copy thành .env rồi điền giá trị thật

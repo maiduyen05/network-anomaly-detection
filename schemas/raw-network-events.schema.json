@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://network-anomaly.local/schemas/raw-network-events.schema.json",
+  "title": "Raw UE Log Envelope",
+  "description": "Một dòng log nguyên bản cùng metadata nguồn tối thiểu.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "raw_record_id",
+    "schema_version",
+    "source_file",
+    "source_line",
+    "raw_payload"
+  ],
+  "properties": {
+    "raw_record_id": {
+      "type": "string",
+      "description": "SHA-256 của source file, source line và raw payload.",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "description": "Phiên bản cấu trúc message raw.",
+      "const": "raw-envelope-v1"
+    },
+    "source_file": {
+      "type": "string",
+      "description": "Tên file nguồn.",  
+      "minLength": 1
+    },
+    "source_line": {
+      "type": "integer",
+      "description": "Số thứ tự dòng trong file, bắt đầu từ 1.",
+      "minimum": 1
+    },
+    "raw_payload": {
+      "type": "string",
+      "description": "Dòng log nguyên bản; có thể rỗng để Bronze route sang DLQ."
+    }
+  }
+}
+

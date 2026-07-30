@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    File cấu hình Maven cho module log-producer.
+
+    Maven sẽ:
+    1. Tải các thư viện cần thiết.
+    2. Biên dịch Java.
+    3. Chạy unit test.
+    4. Đóng gói producer thành file JAR.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="
+             http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <!-- Phiên bản định dạng của Maven POM. -->
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Tên định danh của tổ chức hoặc project. -->
+    <groupId>com.network</groupId>
+
+    <!-- Tên của module Maven. -->
+    <artifactId>log-producer</artifactId>
+
+    <!-- Phiên bản hiện tại của module. -->
+    <version>1.0.0-SNAPSHOT</version>
+
+    <!-- Kiểu đóng gói mặc định là JAR. -->
+    <packaging>jar</packaging>
+
+    <!-- Tên hiển thị của module. -->
+    <name>Network Log Producer</name>
+
+    <properties>
+        <!-- Dùng UTF-8 khi đọc và biên dịch source code. -->
+        <project.build.sourceEncoding>
+            UTF-8
+        </project.build.sourceEncoding>
+
+        <!-- Dùng Java 17, đồng nhất với Flink hiện tại. -->
+        <maven.compiler.release>
+            17
+        </maven.compiler.release>
+
+        <!-- Phiên bản Kafka client đồng nhất với Kafka 3.8.1. -->
+        <kafka.version>
+            3.8.1
+        </kafka.version>
+
+        <!-- Thư viện chuyển Java object thành JSON. -->
+        <jackson.version>
+            2.17.2
+        </jackson.version>
+
+        <!-- Thư viện ghi log. -->
+        <slf4j.version>
+            2.0.16
+        </slf4j.version>
+
+        <!-- Framework unit test. -->
+        <junit.version>
+            5.11.0
+        </junit.version>
+    </properties>
+
+    <dependencies>
+
+        <!--
+            Kafka client cung cấp KafkaProducer, ProducerRecord
+            và các cấu hình producer.
+        -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>${kafka.version}</version>
+        </dependency>
+
+        <!--
+            Jackson chuyển RawNetworkEvent Java object
+            thành chuỗi JSON để gửi vào Kafka.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!--
+            SLF4J là abstraction cho logging.
+            Code sử dụng Logger thay vì System.out.println.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
+        <!--
+            Simple logger giúp hiển thị log khi chạy local.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            JUnit Jupiter dùng để viết và chạy unit test.
+            Dependency này chỉ dùng khi test.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+
+            <!--
+                Plugin biên dịch Java theo phiên bản khai báo
+                trong maven.compiler.release.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+
+            <!--
+                Plugin chạy unit test JUnit 5.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.0</version>
+
+                <configuration>
+                    <!--
+                        Tắt Java module path vì project hiện tại
+                        không sử dụng module-info.java.
+                    -->
+                    <useModulePath>false</useModulePath>
+                </configuration>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

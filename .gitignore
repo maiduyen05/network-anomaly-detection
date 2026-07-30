@@ -54,13 +54,20 @@ inference-service/models/*
 runtime/checkpoints/*
 runtime/savepoints/*
 runtime/logs/*
+runtime/producer/*
 
 !runtime/checkpoints/.gitkeep
 !runtime/savepoints/.gitkeep
 !runtime/logs/.gitkeep
+!runtime/producer/.gitkeep
 
 # =====================================
 # NiFi runtime repositories
 # =====================================
 nifi/database_repository/
+
+# =====================================
+# Data
+# =====================================
+data/raw/*
 
