@@ -33,7 +33,6 @@ public final class RawNetworkEventFactory {
      * raw_payload
      * </pre>
      *
-     * <p>Nó không phải phiên bản của layout 52 cột.</p>
      */
     public static final String SCHEMA_VERSION =
             "raw-envelope-v1";

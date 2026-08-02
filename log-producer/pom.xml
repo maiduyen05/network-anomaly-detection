@@ -150,6 +150,18 @@
                 </configuration>
             </plugin>
 
+            <!--
+            Chạy Java main class trực tiếp bằng Maven.
+
+            Ví dụ:
+            mvn exec:java -Dexec.mainClass=...
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.3.0</version>
+            </plugin>
+
         </plugins>
     </build>
 
