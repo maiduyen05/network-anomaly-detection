@@ -8,6 +8,9 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Properties;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
 /**
  * Cấu hình của ứng dụng log-producer.
  * Class này đọc application.properties và tách hai nhóm:
@@ -176,4 +179,70 @@ public final class ProducerConfiguration {
 
         return value.trim();
     }
+
+    private static final String DEFAULT_CONFIG_RESOURCE =
+        "application.properties";
+
+        public static ProducerConfiguration loadDefault()
+        throws IOException {
+
+    InputStream inputStream =
+            ProducerConfiguration.class
+                    .getClassLoader()
+                    .getResourceAsStream(
+                            DEFAULT_CONFIG_RESOURCE
+                    );
+
+    if (inputStream == null) {
+        throw new IOException(
+                "Classpath configuration not found: "
+                        + DEFAULT_CONFIG_RESOURCE
+        );
+    }
+
+    try (
+            Reader reader = new InputStreamReader(
+                    inputStream,
+                    StandardCharsets.UTF_8
+            )
+    ) {
+        return load(reader);
+    }
+
+    private static ProducerConfiguration load(
+        Reader reader
+) throws IOException {
+
+    Properties allProperties = new Properties();
+    allProperties.load(reader);
+
+    String topic = requireNonBlank(
+            allProperties.getProperty("app.topic"),
+            "app.topic"
+    );
+
+    Properties kafkaProperties = new Properties();
+    kafkaProperties.putAll(allProperties);
+    kafkaProperties.remove("app.topic");
+
+    requireNonBlank(
+            kafkaProperties.getProperty("bootstrap.servers"),
+            "bootstrap.servers"
+    );
+
+    requireNonBlank(
+            kafkaProperties.getProperty("key.serializer"),
+            "key.serializer"
+    );
+
+    requireNonBlank(
+            kafkaProperties.getProperty("value.serializer"),
+            "value.serializer"
+    );
+
+    return new ProducerConfiguration(
+            topic,
+            kafkaProperties
+    );
+}
 }

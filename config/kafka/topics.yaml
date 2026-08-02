@@ -5,24 +5,24 @@ bootstrap_servers:
   external: localhost:9092
 
 defaults:
-  partitions: 1     
+  partitions: 3    
   replication_factor: 1    # Chạy trên local 
 
 topics:
   raw_network_events:
-    name: raw-network-events
-    producer: nifi
+    name: raw.ue.log.line.
+    producer: log-producer
     consumers:
       - flink-preprocess
 
   processed_network_events:
-    name: processed-network-events
+    name: processed.ue.log.line.
     producer: flink-preprocess
     consumers:
       - inference-service
 
   anomaly_predictions:
-    name: anomaly-predictions
+    name: anomaly.prediction.
     producer: inference-service
     consumers:
       - nwdaf-adapter

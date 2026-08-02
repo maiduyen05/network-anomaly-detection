@@ -104,7 +104,7 @@ public final class LogProducerApplication {
      */
     private static void run(
             Path inputDirectory,
-            Path configPath
+            ProducerConfiguration configuration
     ) throws IOException {
 
         validateInputDirectory(
@@ -113,9 +113,16 @@ public final class LogProducerApplication {
 
         // Đọc cấu hình application và Kafka.
         ProducerConfiguration configuration =
-                ProducerConfiguration.load(
-                        configPath
-                );
+        args.length == 2
+                ? ProducerConfiguration.load(
+                        Path.of(args[1])
+                )
+                : ProducerConfiguration.loadDefault();
+
+        run(
+                inputDirectory,
+                configuration
+        );
 
         // Liệt kê file theo thứ tự tên để kết quả dễ tái lập.
         List<Path> inputFiles =
