@@ -1,7 +1,6 @@
 package com.network.preprocess.model;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -27,6 +26,9 @@ import java.util.Map;
  *     <li>Gắn watermark.</li>
  *     <li>Tạo model feature.</li>
  * </ul>
+ */
+/**
+ * Event hợp lệ ở cuối tầng Bronze.
  */
 public record BronzeEvent(
         String schemaVersion,
@@ -59,14 +61,18 @@ public record BronzeEvent(
 ) implements Serializable {
 
     /**
-     * Compact constructor bảo vệ rawFields khỏi bị sửa sau khi
-     * BronzeEvent đã được tạo.
+     * Tạo bản sao độc lập của rawFields.
+     *
+     * Không sử dụng Map.copyOf(), Collections.emptyMap() hoặc
+     * Collections.unmodifiableMap() vì Flink/Kryo cần Map mutable
+     * trong quá trình sao chép record giữa các operator.
+     *
+     * Việc tạo LinkedHashMap mới vẫn ngăn Map truyền từ bên ngoài
+     * thay đổi trực tiếp dữ liệu đang nằm trong BronzeEvent.
      */
     public BronzeEvent {
         rawFields = rawFields == null
-                ? Collections.emptyMap()
-                : Collections.unmodifiableMap(
-                        new LinkedHashMap<>(rawFields)
-                );
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(rawFields);
     }
 }

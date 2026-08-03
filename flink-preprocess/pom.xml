@@ -56,6 +56,36 @@
     <dependencies>
 
         <!--
+        Bộ tiện ích test chung của Flink.
+
+        Dependency này cung cấp các thành phần cần thiết để chạy
+        Flink operator trong môi trường unit test.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-test-utils</artifactId>
+            <version>${flink.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Test JAR của flink-streaming-java.
+
+            Hai class dưới đây nằm trong test JAR, không nằm trong JAR runtime:
+            - OneInputStreamOperatorTestHarness
+            - ProcessFunctionTestHarnesses
+
+            type=test-jar yêu cầu Maven tải file có classifier "tests".
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-java</artifactId>
+            <version>${flink.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
             DataStream API: DataStream, map, filter, keyBy, window...
             Scope provided vì Flink cluster đã chứa dependency này.
         -->
@@ -163,14 +193,44 @@
                 </configuration>
             </plugin>
 
-            <!-- Chạy unit test JUnit 5. -->
+            <!-- Chạy unit test JUnit 5 trên Java 17. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
 
                 <configuration>
-                    <!-- Dự án không dùng Java Platform Module System. -->
+                    <!--
+                        Flink test harness, Kryo và ClosureCleaner sử dụng
+                        reflection trên một số package của JDK.
+
+                        Java 17 đóng các package này theo mặc định nên cần
+                        mở chúng cho JVM chạy unit test.
+                    -->
+                    <argLine>
+                        --add-opens=java.base/java.lang=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-opens=java.base/java.net=ALL-UNNAMED
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                        --add-opens=java.base/java.text=ALL-UNNAMED
+                        --add-opens=java.base/java.time=ALL-UNNAMED
+                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED
+                        --add-opens=java.base/java.util.stream=ALL-UNNAMED
+                        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+                        --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+                        --add-opens=java.sql/java.sql=ALL-UNNAMED
+                    </argLine>
+
+                    <!-- Luôn chạy test bằng JVM fork để argLine được áp dụng. -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+
+                    <!-- Dự án không sử dụng Java Module System trực tiếp. -->
                     <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
