@@ -9,20 +9,56 @@ defaults:
   replication_factor: 1    # Chạy trên local 
 
 topics:
-  raw_network_events:
-    name: raw.ue.log.line.
+  raw_ue_log_line:
+    name: raw.ue.log.line
     producer: log-producer
     consumers:
-      - flink-preprocess
+      - flink-bronze
 
-  processed_network_events:
-    name: processed.ue.log.line.
-    producer: flink-preprocess
+  bronze_ue_event:
+    name: bronze.ue.event
+    producer: flink-bronze
+    consumers:
+      - flink-silver
+
+  silver_ue_event:
+    name: silver.ue.event
+    producer: flink-silver
+    consumers:
+      - flink-gold
+
+  gold_ue_sequence:
+    name: gold.ue.sequence
+    producer: flink-gold
     consumers:
       - inference-service
 
+  dlq_ue_log_line:
+    name: dlq.ue.log.line
+    producer: flink-bronze
+    consumers:
+      - operations
+
+  invalid_identity:
+    name: invalid-identity
+    producer: flink-silver
+    consumers:
+      - operations
+
+  unsupported_event:
+    name: unsupported-event
+    producer: flink-silver
+    consumers:
+      - operations
+
+  late_ue_event:
+    name: late-ue-event
+    producer: flink-silver
+    consumers:
+      - operations
+
   anomaly_predictions:
-    name: anomaly.prediction.
+    name: anomaly-predictions
     producer: inference-service
     consumers:
       - nwdaf-adapter

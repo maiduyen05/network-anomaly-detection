@@ -8,25 +8,47 @@ thời gian thực, ghi kết quả ra topic `processed-network-events`.
 ## Vai trò trong pipeline
  
 ```
-Kafka: raw-network-events → [flink-preprocess] → Kafka: processed-network-events
+Kafka: raw.ue.log.line
+        │
+        ▼
+Flink Bronze
+  parse envelope
+  validate raw schema
+  parse 52 fields
+  normalize timestamp/type
+        │
+        ├── lỗi ──► dlq.ue.log.line
+        ▼
+Kafka: bronze.ue.event
+        │
+        ▼
+Flink Silver
+  resolve IMSI
+  normalize event/result
+  deduplicate
+  watermark + late event
+        │
+        ├── thiếu identity ──► invalid-identity
+        ├── unsupported ─────► unsupported-event
+        ├── quá muộn ────────► late-ue-event
+        ▼
+Kafka: silver.ue.event
+        │
+        ▼
+Flink Gold
+  keyBy IMSI
+  gom đúng 32 event
+  stride configurable
+  tạo x_cat[32,4]
+  tạo x_num[32,2]
+  giữ evidence.events
+        ▼
+Kafka: gold.ue.sequence
+        │
+        ▼
+AnLF
 ```
- 
-## Các bước xử lý (theo thứ tự chạy trong `PreprocessJob.java`)
- 
-| # | Bước | Class | Mục đích |
-|---|---|---|---|
-| 1 | Parse JSON | `parser/JsonEventParser.java` | Chuyển bytes từ Kafka thành object Java |
-| 2 | Kiểm tra schema | `validation/SchemaValidator.java` | Đối chiếu `schemas/raw-network-events.schema.json` |
-| 3 | Loại message lỗi | `validation/InvalidEventFilter.java` | Tách message không hợp lệ sang side output |
-| 4 | Chuẩn hóa timestamp | `operator/TimestampNormalizer.java` | Đưa về cùng định dạng/timezone |
-| 5 | Chuyển kiểu dữ liệu | `operator/TypeCastOperator.java` | Ép kiểu đúng (chuỗi số → số...) |
-| 6 | keyBy subscriber/device | `operator/SubscriberKeySelector.java` | Gom event theo thuê bao/thiết bị |
-| 7 | Window theo thời gian | `operator/EventWindowAssigner.java` | Gom event trong 1 khoảng thời gian |
-| 8 | Tạo đặc trưng | `operator/FeatureExtractor.java` | Tính chỉ số đầu vào cho model |
- 
-> Muốn thêm/bớt bước: thêm/xóa 1 class trong `operator/` rồi
-> thêm/xóa 1 dòng gọi tương ứng trong `PreprocessJob.java`. Không cần sửa
-> các bước khác.
+
  
 ## Package
  

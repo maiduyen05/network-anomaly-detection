@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+    Maven configuration cho Flink preprocessing job.
+
+    Quy trình build:
+    1. Biên dịch bằng Java 17.
+    2. Chạy unit test JUnit 5.
+    3. Đóng gói Kafka connector, Jackson và code dự án vào fat JAR.
+    4. Không đóng gói lại thư viện Flink core vì Flink cluster đã cung cấp.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="
+             http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.network</groupId>
+    <artifactId>flink-preprocess</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>Network Flink Preprocess Job</name>
+
+    <properties>
+        <!-- Mã nguồn và tài nguyên đều dùng UTF-8. -->
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <!-- Đồng nhất với image Flink Java 17 trong docker-compose.yml. -->
+        <maven.compiler.release>17</maven.compiler.release>
+
+        <!-- Đồng nhất với flink:1.20.1-scala_2.12-java17. -->
+        <flink.version>1.20.1</flink.version>
+
+        <!-- Kafka connector tương thích với Flink 1.20.x. -->
+        <flink.kafka.connector.version>3.4.0-1.20</flink.kafka.connector.version>
+
+        <!-- Đồng nhất Jackson với module log-producer hiện tại. -->
+        <jackson.version>2.17.2</jackson.version>
+
+        <!-- API logging mà Flink cluster cung cấp khi chạy job. -->
+        <slf4j.version>1.7.36</slf4j.version>
+
+        <!-- Framework unit test. -->
+        <junit.version>5.11.0</junit.version>
+
+        <!-- Phiên bản Maven plugin. -->
+        <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
+        <maven.surefire.plugin.version>3.5.0</maven.surefire.plugin.version>
+        <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
+    </properties>
+
+    <dependencies>
+
+        <!--
+            DataStream API: DataStream, map, filter, keyBy, window...
+            Scope provided vì Flink cluster đã chứa dependency này.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-java</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Flink client dùng để tạo và thực thi
+            StreamExecutionEnvironment.
+
+            Scope provided vì Flink cluster đã chứa dependency này.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-clients</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Chứa các API nền tảng dành cho connector, bao gồm:
+
+            org.apache.flink.connector.base.DeliveryGuarantee
+
+            KafkaSink sử dụng DeliveryGuarantee để chọn cơ chế ghi:
+            NONE, AT_LEAST_ONCE hoặc EXACTLY_ONCE.
+
+            Dependency này phải được khai báo trực tiếp vì Kafka connector
+            không đưa nó vào compile classpath của ứng dụng một cách bắc cầu.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-base</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            KafkaSource và KafkaSink cho Flink DataStream API.
+
+            Không đặt scope=provided vì Flink binary không bảo đảm chứa
+            Kafka connector. Maven Shade sẽ đưa connector vào fat JAR.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-connector-kafka</artifactId>
+            <version>${flink.kafka.connector.version}</version>
+        </dependency>
+
+        <!-- Chuyển JSON Kafka thành Java object và ngược lại. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Đọc file application.yaml. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!--
+            Code gọi logger qua SLF4J.
+
+            Scope provided để không đóng gói logging implementation khác
+            vào job JAR và gây xung đột với Flink cluster.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- JUnit 5 chỉ dùng khi chạy test. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <!-- Tên JAR ổn định để script submit dễ tìm. -->
+        <finalName>flink-preprocess-${project.version}</finalName>
+
+        <plugins>
+
+            <!-- Biên dịch toàn bộ source theo Java 17. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler.plugin.version}</version>
+
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                </configuration>
+            </plugin>
+
+            <!-- Chạy unit test JUnit 5. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.plugin.version}</version>
+
+                <configuration>
+                    <!-- Dự án không dùng Java Platform Module System. -->
+                    <useModulePath>false</useModulePath>
+                </configuration>
+            </plugin>
+
+            <!--
+                Tạo fat JAR chứa code dự án và dependency cần thiết.
+
+                Các dependency Flink có scope=provided sẽ không bị đóng gói lại.
+                Điều này giảm kích thước JAR và tránh xung đột classloader.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>${maven.shade.plugin.version}</version>
+
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+
+                        <configuration>
+                            <!--
+                                Giữ nguyên pom.xml thay vì tạo
+                                dependency-reduced-pom.xml.
+                            -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                            <!--
+                                Không minimize vì Jackson và Flink sử dụng
+                                reflection. Minimize có thể xóa nhầm class
+                                cần thiết khi chạy job.
+                            -->
+                            <minimizeJar>false</minimizeJar>
+
+                            <!--
+                                Loại bỏ chữ ký của các JAR gốc để tránh
+                                lỗi security sau khi gộp thành fat JAR.
+                            -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+
+                            <transformers>
+                                <!--
+                                    Gộp các file META-INF/services của
+                                    Kafka, Flink và Jackson.
+                                -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+
+                                <!-- Khai báo entry point của Flink job. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.network.preprocess.PreprocessJob</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

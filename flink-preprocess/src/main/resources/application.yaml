@@ -1,0 +1,151 @@
+# ============================================================
+# Cấu hình nghiệp vụ và runtime cho flink-preprocess.
+#
+# Không ghi password, token hoặc secret vào file này.
+# Environment override sẽ được triển khai trong JobConfig.
+# ============================================================
+
+job:
+  # Tên xuất hiện trên Flink Web UI.
+  name: flink-preprocess-v1
+
+  # Có ba Kafka partition nên đặt source parallelism bằng 3.
+  parallelism: 3
+
+  # Tạo checkpoint mỗi 60 giây.
+  checkpoint-interval-ms: 60000
+
+  # Hủy checkpoint nếu chưa hoàn thành sau 5 phút.
+  checkpoint-timeout-ms: 300000
+
+  # Không cho hai checkpoint chạy đồng thời.
+  max-concurrent-checkpoints: 1
+
+  # Chờ tối thiểu 30 giây giữa hai checkpoint hoàn thành.
+  min-pause-between-checkpoints-ms: 30000
+
+```yaml
+kafka:
+  # Địa chỉ Kafka broker mà Flink sẽ kết nối tới.
+  # kafka:29092 thường là địa chỉ Kafka bên trong Docker network.
+  bootstrap-servers: kafka:29092
+
+  # Khi consumer group chưa có committed offset,
+  # Flink sẽ đọc từ message cũ nhất còn được Kafka lưu.
+  starting-offsets: earliest
+
+
+bronze:
+  # Topic chứa log thô do log-producer gửi vào Kafka.
+  input-topic: raw.ue.log.line
+
+  # Topic chứa dữ liệu đã được Bronze job kiểm tra và chuẩn hóa cơ bản.
+  output-topic: bronze.ue.event
+
+  # Topic chứa các message lỗi không thể xử lý ở Bronze layer.
+  # DLQ là viết tắt của Dead Letter Queue.
+  dlq-topic: dlq.ue.log.line
+
+  # Consumer group của Bronze Flink job.
+  # Kafka dùng giá trị này để lưu offset đã đọc của job.
+  consumer-group-id: flink-bronze-v1
+
+  # Hai prefix phải khác nhau.
+  # Không chạy hai Bronze job cùng lúc với cùng prefix.
+  output-transactional-id-prefix: flink-bronze-output-v1-
+  dlq-transactional-id-prefix: flink-bronze-dlq-v1-
+
+  # Phiên bản schema của JSON envelope nhận từ raw input topic.
+  # Dùng để kiểm tra message đầu vào có đúng cấu trúc mong đợi không.
+  envelope-schema-version: raw-envelope-v1
+
+  # Phiên bản schema của dữ liệu Bronze được ghi ra output topic.
+  output-schema-version: bronze-v1
+
+  raw-log:
+    # Ký tự dùng để phân tách các trường trong một dòng raw log.
+    delimiter: ";"
+
+    # Số lượng trường bắt buộc phải có sau khi tách raw log.
+    # Nếu số field khác 52, message có thể bị xem là không hợp lệ.
+    field-count: 52
+
+  timestamp:
+    # Múi giờ dùng để chuyển timestamp dạng local time
+    # thành thời gian chuẩn khi xử lý dữ liệu.
+    local-timezone: Asia/Ho_Chi_Minh
+
+
+silver:
+  # Topic đầu vào của Silver job.
+  # Dữ liệu được lấy từ output của Bronze job.
+  input-topic: bronze.ue.event
+
+  # Topic chứa dữ liệu Silver đã được làm sạch,
+  # chuẩn hóa identity và bổ sung thông tin cần thiết.
+  output-topic: silver.ue.event
+
+  # Topic chứa các event không xác định được identity hợp lệ,
+  # ví dụ thiếu hoặc sai IMSI, MSISDN, IMEI hoặc khóa định danh.
+  invalid-identity-topic: invalid-identity
+
+  # Topic chứa các loại event mà Silver job chưa hỗ trợ xử lý.
+  unsupported-event-topic: unsupported-event
+
+  # Topic chứa các event đến quá trễ so với watermark cho phép.
+  late-event-topic: late-ue-event
+
+  # Consumer group của Silver Flink job.
+  # Group này phải khác consumer group của Bronze và Gold.
+  consumer-group-id: flink-silver-v1
+
+  # Phiên bản schema của dữ liệu Silver được ghi ra Kafka.
+  output-schema-version: silver-v1
+
+  # Cho phép event đến trễ tối đa 30.000 ms, tức 30 giây.
+  # Flink dùng giá trị này để tạo watermark cho event time.
+  watermark-max-out-of-orderness-ms: 30000
+
+  # Thời gian tồn tại tối đa của dữ liệu trong Flink state.
+  # 86.400.000 ms tương đương 24 giờ.
+  # State không được sử dụng quá thời gian này có thể bị xóa.
+  state-ttl-ms: 86400000
+
+
+gold:
+  # Topic đầu vào của Gold job.
+  # Dữ liệu được lấy từ output của Silver job.
+  input-topic: silver.ue.event
+
+  # Topic chứa các chuỗi sự kiện UE đã được tạo để phục vụ
+  # phân tích, machine learning hoặc downstream processing.
+  output-topic: gold.ue.sequence
+
+  # Consumer group của Gold Flink job.
+  consumer-group-id: flink-gold-v1
+
+  # Phiên bản schema của dữ liệu sequence được ghi ra Gold topic.
+  output-schema-version: gold-sequence-v1
+
+  # Số lượng event tối đa trong một sequence.
+  # Mỗi sequence sẽ chứa 32 event liên tiếp.
+  sequence-length: 32
+
+  # Số event dịch chuyển khi tạo sequence tiếp theo.
+  # Ví dụ sequence đầu dùng event 1-32,
+  # sequence tiếp theo dùng event 9-40.
+  sequence-stride: 8
+
+  # Phiên bản của bộ feature được tạo từ chuỗi UE event.
+  # Dùng để phân biệt khi logic tạo feature thay đổi.
+  feature-version: ue-seq-v1
+
+
+flink:
+  # Số lượng subtask mặc định chạy song song cho các operator.
+  # Parallelism 3 nghĩa là mỗi operator có thể có 3 instance xử lý đồng thời.
+  parallelism: 3
+
+  # Khoảng thời gian giữa hai lần Flink thực hiện checkpoint.
+  # 60.000 ms tương đương 60 giây.
+  checkpoint-interval-ms: 60000
