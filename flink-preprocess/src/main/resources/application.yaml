@@ -24,7 +24,6 @@ job:
   # Chờ tối thiểu 30 giây giữa hai checkpoint hoàn thành.
   min-pause-between-checkpoints-ms: 30000
 
-```yaml
 kafka:
   # Địa chỉ Kafka broker mà Flink sẽ kết nối tới.
   # kafka:29092 thường là địa chỉ Kafka bên trong Docker network.
@@ -77,6 +76,9 @@ bronze:
 
 
 silver:
+  # Tên hiển thị của Silver Job trên Flink Web UI.
+  job-name: flink-silver-v1
+
   # Topic đầu vào của Silver job.
   # Dữ liệu được lấy từ output của Bronze job.
   input-topic: bronze.ue.event
@@ -99,6 +101,12 @@ silver:
   # Group này phải khác consumer group của Bronze và Gold.
   consumer-group-id: flink-silver-v1
 
+  # Mỗi Kafka sink EXACTLY_ONCE phải có transactional ID prefix riêng.
+  output-transactional-id-prefix: flink-silver-output-v1-
+  invalid-identity-transactional-id-prefix: flink-silver-invalid-identity-v1-
+  unsupported-event-transactional-id-prefix: flink-silver-unsupported-event-v1-
+  late-event-transactional-id-prefix: flink-silver-late-event-v1-
+
   # Phiên bản schema của dữ liệu Silver được ghi ra Kafka.
   output-schema-version: silver-v1
 
@@ -114,6 +122,33 @@ silver:
   # 86.400.000 ms tương đương 24 giờ.
   # State không được sử dụng quá thời gian này có thể bị xóa.
   state-ttl-ms: 86400000
+
+    # IDENTITY REFERENCE DATA DÙNG CHO LOCAL DEVELOPMENT
+  # ==========================================================
+  #
+  # Nếu BronzeEvent có IMSI hợp lệ, Silver dùng IMSI trực tiếp
+  # và không cần tra hai map dưới.
+  #
+  # Event không có IMSI mới fallback lần lượt:
+  # MSISDN → IMSI
+  # MTMSI  → IMSI
+  identity-mappings:
+    msisdn-to-imsi: {}
+    mtmsi-to-imsi: {}
+
+  # ==========================================================
+  # EVENT CATALOG ĐƯỢC MODEL HỖ TRỢ
+  # ==========================================================
+  #
+  # Chỉ EVENT_ID nằm trong danh sách này mới được đưa vào
+  # silver.ue.event. Event khác đi vào unsupported-event.
+  #
+  # Không tự động coi mọi EVENT_ID raw là hợp lệ vì Gold và model
+  # cần một vocabulary ổn định.
+  supported-events:
+    - alias: l_service_request
+      canonical-event-id: l_service_request
+      display-name: LTE Service Request
 
 
 gold:

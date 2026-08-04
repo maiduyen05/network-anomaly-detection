@@ -44,6 +44,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
     volumes:
+      # Lưu dữ liệu Kafka khi container được tạo lại.
       - kafka-data:/var/lib/kafka/data
 
     networks:
@@ -133,17 +134,19 @@ services:
         state.savepoints.dir: file:///opt/flink/runtime/savepoints
 
     volumes:
-      # File JAR được Maven tạo trong target/
-      - ./flink-preprocess/target:/opt/flink/usrlib:ro
+    # Chứa JAR triển khai ổn định, không bị "mvn clean" xóa.
+    - ./runtime/flink/usrlib:/opt/flink/usrlib:ro
 
-      # Config chung và schema dữ liệu
-      - ./config:/opt/project/config:ro
-      - ./schemas:/opt/project/schemas:ro
+    # Config và schema chỉ cần quyền đọc.
+    - ./config:/opt/project/config:ro
+    - ./schemas:/opt/project/schemas:ro
 
-      # Trạng thái và log runtime
-      - ./runtime/checkpoints:/opt/flink/runtime/checkpoints
-      - ./runtime/savepoints:/opt/flink/runtime/savepoints
-      - ./runtime/logs:/opt/flink/runtime/logs
+    # Checkpoint và savepoint phải có quyền ghi.
+    - ./runtime/flink/checkpoints:/opt/flink/runtime/checkpoints
+    - ./runtime/flink/savepoints:/opt/flink/runtime/savepoints
+
+    # Log thực tế của Flink nằm tại /opt/flink/log.
+    - ./runtime/flink/logs/jobmanager:/opt/flink/log
 
     depends_on:
       kafka:
@@ -167,18 +170,21 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.bind-host: 0.0.0.0
         taskmanager.host: flink-taskmanager
-        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-2}
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-3}
         parallelism.default: ${FLINK_PARALLELISM:-1}
         state.checkpoints.dir: file:///opt/flink/runtime/checkpoints
         state.savepoints.dir: file:///opt/flink/runtime/savepoints
 
     volumes:
-      - ./flink-preprocess/target:/opt/flink/usrlib:ro
-      - ./config:/opt/project/config:ro
-      - ./schemas:/opt/project/schemas:ro
-      - ./runtime/checkpoints:/opt/flink/runtime/checkpoints
-      - ./runtime/savepoints:/opt/flink/runtime/savepoints
-      - ./runtime/logs:/opt/flink/runtime/logs
+    - ./runtime/flink/usrlib:/opt/flink/usrlib:ro
+    - ./config:/opt/project/config:ro
+    - ./schemas:/opt/project/schemas:ro
+
+    # Phải dùng cùng checkpoint/savepoint directory với JobManager.
+    - ./runtime/flink/checkpoints:/opt/flink/runtime/checkpoints
+    - ./runtime/flink/savepoints:/opt/flink/runtime/savepoints
+
+    - ./runtime/flink/logs/taskmanager:/opt/flink/log
 
     depends_on:
       - flink-jobmanager

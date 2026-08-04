@@ -6,6 +6,7 @@ import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator
         .initializer.OffsetsInitializer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 
 import java.util.Locale;
 
@@ -81,10 +82,14 @@ public final class RawEventKafkaSource {
 
         return switch (value) {
             case "earliest" ->
-                    OffsetsInitializer.earliest();
+                OffsetsInitializer.committedOffsets(
+                OffsetResetStrategy.EARLIEST
+                );
 
-            case "latest" ->
-                    OffsetsInitializer.latest();
+        case "latest" ->
+                OffsetsInitializer.committedOffsets(
+                OffsetResetStrategy.LATEST
+                );
 
             default ->
                     throw new IllegalArgumentException(
