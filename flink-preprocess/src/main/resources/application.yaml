@@ -106,6 +106,10 @@ silver:
   # Flink dùng giá trị này để tạo watermark cho event time.
   watermark-max-out-of-orderness-ms: 30000
 
+  # Nếu một Kafka partition không có dữ liệu trong 60 giây,
+  # tạm coi partition đó là idle để nó không chặn watermark chung.
+  watermark-idleness-ms: 60000
+
   # Thời gian tồn tại tối đa của dữ liệu trong Flink state.
   # 86.400.000 ms tương đương 24 giờ.
   # State không được sử dụng quá thời gian này có thể bị xóa.
