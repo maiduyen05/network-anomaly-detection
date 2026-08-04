@@ -179,6 +179,14 @@ gold:
   # Dùng để phân biệt khi logic tạo feature thay đổi.
   feature-version: ue-seq-v1
 
+  # Gold phải tạo lại watermark vì watermark không được Kafka
+  # truyền từ Silver Job sang Gold Job.
+  watermark-max-out-of-orderness-ms: 30000
+  watermark-idleness-ms: 60000
+
+  # State theo UE tồn tại tối đa một ngày không được cập nhật.
+  state-ttl-ms: 86400000
+
 
 flink:
   # Số lượng subtask mặc định chạy song song cho các operator.
