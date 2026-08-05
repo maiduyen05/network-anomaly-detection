@@ -60,6 +60,7 @@ runtime/producer/*
 runtime/flink/**/*.log
 runtime/flink/**/*.out
 runtime/flink/logs/
+runtime/flink/checkpoints/*
 
 
 !runtime/checkpoints/.gitkeep
@@ -77,3 +78,4 @@ nifi/database_repository/
 # =====================================
 data/raw/*
 
+*.log
