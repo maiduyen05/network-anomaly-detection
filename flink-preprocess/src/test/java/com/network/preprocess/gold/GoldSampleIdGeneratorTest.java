@@ -106,27 +106,58 @@ class GoldSampleIdGeneratorTest {
         return new GoldSequenceEvent(
                 "452040000000001",
                 "452040000000001",
+
+                /*
+                 * Category nguồn vẫn ở dạng chuỗi.
+                 * l_service_request có vocabulary ID 8.
+                 */
                 "l_service_request",
-                3,
+                8,
+
+                /*
+                 * success có vocabulary ID 1.
+                 */
                 "success",
                 1,
+
+                /*
+                 * Chuỗi rỗng là category hợp lệ của cả
+                 * CAUSE_CODE và SUB_CAUSE_CODE, có ID 0.
+                 */
+                "",
+                "",
+
+                /*
+                 * Numeric source được giữ nguyên để encoder
+                 * xử lý ở bước tạo tensor.
+                 */
                 100L + index,
+                index % 3,
+
                 Instant.parse("2026-07-08T10:00:00Z")
                         .plusSeconds(index),
+
                 Map.of(
+                        "CAUSE_CODE",
+                        "",
+                        "SUB_CAUSE_CODE",
+                        "",
                         "REQUEST_RETRIES",
                         Integer.toString(index % 3)
                 ),
+
                 Map.of(
                         "IMSI",
                         "452040000000001",
                         "TAC",
                         "1001"
                 ),
+
                 Map.of(
                         "supported",
                         "true"
                 ),
+
                 "raw-record-" + index
         );
     }
