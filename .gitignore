@@ -19,6 +19,8 @@ flink-preprocess/target/
 *.class
 *.jar
 
+
+
 # =====================================
 # Python
 # =====================================
@@ -55,6 +57,10 @@ runtime/checkpoints/*
 runtime/savepoints/*
 runtime/logs/*
 runtime/producer/*
+runtime/flink/**/*.log
+runtime/flink/**/*.out
+runtime/flink/logs/
+
 
 !runtime/checkpoints/.gitkeep
 !runtime/savepoints/.gitkeep
