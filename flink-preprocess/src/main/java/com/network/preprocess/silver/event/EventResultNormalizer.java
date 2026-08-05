@@ -3,84 +3,86 @@ package com.network.preprocess.silver.event;
 import com.network.preprocess.model.EventResult;
 
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
- * Chuẩn hóa EVENT_RESULT.
+ * Chuẩn hóa EVENT_RESULT theo đúng feature contract.
  *
- * <p>Checkpoint này chỉ nhận diện những giá trị đã có contract rõ ràng:</p>
+ * <p>Chỉ hai category được công nhận:</p>
  *
  * <ul>
+ *     <li>reject</li>
  *     <li>success</li>
- *     <li>failure</li>
- *     <li>timeout</li>
- *     <li>unknown</li>
  * </ul>
  *
- * <p>Không tự suy đoán rằng "0" là success hoặc "1" là failure
- * nếu chưa có tài liệu chính thức của nguồn dữ liệu.</p>
+ * <p>Không tự chuyển failure hoặc timeout thành reject.
+ * Việc làm đó sẽ thay đổi ý nghĩa dữ liệu mà chưa có
+ * tài liệu training xác nhận.</p>
  */
 public final class EventResultNormalizer {
 
     private EventResultNormalizer() {
+        // Utility class không cần tạo object.
     }
 
-    public static EventResultNormalization normalize(
+    /**
+     * Chuẩn hóa EVENT_RESULT.
+     *
+     * @return Optional.empty nếu thiếu hoặc không thuộc contract
+     */
+    public static Optional<EventResult> normalize(
             String rawEventResult
     ) {
         if (rawEventResult == null
                 || rawEventResult.isBlank()) {
 
-            return new EventResultNormalization(
-                    EventResult.UNKNOWN,
-                    false,
-                    true
-            );
+            return Optional.empty();
         }
 
-        String trimmed = rawEventResult.trim();
+        String lookupKey =
+                rawEventResult
+                        .trim()
+                        .toLowerCase(Locale.ROOT);
 
-        String lookupKey = trimmed
-                .toLowerCase(Locale.ROOT)
-                .replace('-', '_')
-                .replace(' ', '_');
+        return switch (lookupKey) {
+            case "reject" ->
+                    Optional.of(EventResult.REJECT);
 
-        EventResult normalized;
-        boolean recognized;
+            case "success" ->
+                    Optional.of(EventResult.SUCCESS);
 
-        switch (lookupKey) {
-            case "success" -> {
-                normalized = EventResult.SUCCESS;
-                recognized = true;
-            }
+            default ->
+                    Optional.empty();
+        };
+    }
 
-            case "failure" -> {
-                normalized = EventResult.FAILURE;
-                recognized = true;
-            }
-
-            case "timeout" -> {
-                normalized = EventResult.TIMEOUT;
-                recognized = true;
-            }
-
-            case "unknown" -> {
-                normalized = EventResult.UNKNOWN;
-                recognized = true;
-            }
-
-            default -> {
-                normalized = EventResult.UNKNOWN;
-                recognized = false;
-            }
-        }
-
-        boolean changed =
-                !normalized.wireValue().equals(trimmed);
-
-        return new EventResultNormalization(
-                normalized,
-                recognized,
-                changed
+    /**
+     * Kiểm tra raw value có bị thay đổi cách biểu diễn không.
+     *
+     * <p>Ví dụ:</p>
+     *
+     * <pre>
+     * "success"   → false
+     * " SUCCESS " → true
+     * </pre>
+     */
+    public static boolean wasChanged(
+            String rawEventResult,
+            EventResult normalizedEventResult
+    ) {
+        Objects.requireNonNull(
+                rawEventResult,
+                "rawEventResult must not be null"
         );
+
+        Objects.requireNonNull(
+                normalizedEventResult,
+                "normalizedEventResult must not be null"
+        );
+
+        return !normalizedEventResult
+                .wireValue()
+                .equals(rawEventResult.trim());
     }
 }

@@ -52,10 +52,10 @@ class GoldCategoricalVocabulariesTest {
         CategoricalVocabulary vocabulary =
                 GoldCategoricalVocabularies.normalizedCauseCode();
 
-        assertEquals(1L, vocabulary.encode(""));
-        assertEquals(2L, vocabulary.encode("10"));
-        assertEquals(3L, vocabulary.encode("38"));
-        assertEquals(4L, vocabulary.encode("9"));
+                assertEquals(0L, vocabulary.encode(""));
+                assertEquals(1L, vocabulary.encode("10"));
+                assertEquals(2L, vocabulary.encode("38"));
+                assertEquals(3L, vocabulary.encode("9"));
     }
 
     @Test
@@ -63,13 +63,13 @@ class GoldCategoricalVocabulariesTest {
         CategoricalVocabulary vocabulary =
                 GoldCategoricalVocabularies.subCauseCode();
 
-        assertEquals(1L, vocabulary.encode(""));
-        assertEquals(2L, vocabulary.encode("107"));
-        assertEquals(3L, vocabulary.encode("11"));
-        assertEquals(4L, vocabulary.encode("14"));
-        assertEquals(5L, vocabulary.encode("403"));
-        assertEquals(6L, vocabulary.encode("410"));
-        assertEquals(7L, vocabulary.encode("413"));
+                assertEquals(0L, vocabulary.encode(""));
+                assertEquals(1L, vocabulary.encode("107"));
+                assertEquals(2L, vocabulary.encode("11"));
+                assertEquals(3L, vocabulary.encode("14"));
+                assertEquals(4L, vocabulary.encode("403"));
+                assertEquals(5L, vocabulary.encode("410"));
+                assertEquals(6L, vocabulary.encode("413"));
     }
 
     @Test
@@ -103,10 +103,10 @@ class GoldCategoricalVocabulariesTest {
 
         /*
          * Sau trim, chuỗi chỉ có khoảng trắng trở thành "".
-         * Cause vocabulary có "" nên kết quả là ID 1.
+         * Cause vocabulary có "" nên kết quả là ID 0.
          */
         assertEquals(
-                1L,
+                0L,
                 causeVocabulary.encode("   ")
         );
 

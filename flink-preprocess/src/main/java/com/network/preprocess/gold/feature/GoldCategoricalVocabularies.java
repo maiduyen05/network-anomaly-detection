@@ -59,16 +59,16 @@ public final class GoldCategoricalVocabularies {
     /**
      * x_cat[:, 2] — normalized_cause_code.
      *
-     * <p>Chuỗi rỗng là category thật và có ID 1.</p>
+     * <p>Chuỗi rỗng là category thật và có ID 0.</p>
      */
     public static CategoricalVocabulary normalizedCauseCode() {
         LinkedHashMap<String, Long> mapping =
                 new LinkedHashMap<>();
 
-        mapping.put("", 1L);
-        mapping.put("10", 2L);
-        mapping.put("38", 3L);
-        mapping.put("9", 4L);
+        mapping.put("", 0L);
+        mapping.put("10", 1L);
+        mapping.put("38", 2L);
+        mapping.put("9", 3L);
 
         return new CategoricalVocabulary(
                 "normalized_cause_code",
@@ -86,13 +86,13 @@ public final class GoldCategoricalVocabularies {
         LinkedHashMap<String, Long> mapping =
                 new LinkedHashMap<>();
 
-        mapping.put("", 1L);
-        mapping.put("107", 2L);
-        mapping.put("11", 3L);
-        mapping.put("14", 4L);
-        mapping.put("403", 5L);
-        mapping.put("410", 6L);
-        mapping.put("413", 7L);
+        mapping.put("", 0L);
+        mapping.put("107", 1L);
+        mapping.put("11", 2L);
+        mapping.put("14", 3L);
+        mapping.put("403", 4L);
+        mapping.put("410", 5L);
+        mapping.put("413", 6L);
 
         return new CategoricalVocabulary(
                 "sub_cause_code",

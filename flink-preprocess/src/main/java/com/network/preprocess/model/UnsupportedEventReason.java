@@ -15,5 +15,16 @@ public enum UnsupportedEventReason implements Serializable {
     /**
      * EVENT_ID có giá trị nhưng không nằm trong model catalog.
      */
-    UNSUPPORTED_EVENT_ID
+    UNSUPPORTED_EVENT_ID,
+
+    /**
+     * EVENT_RESULT null, rỗng hoặc chỉ chứa khoảng trắng.
+     */
+    MISSING_EVENT_RESULT,
+
+    /**
+     * EVENT_RESULT có giá trị nhưng không nằm trong
+     * vocabulary reject/success của feature contract.
+     */
+    UNSUPPORTED_EVENT_RESULT
 }

@@ -1,4 +1,5 @@
 package com.network.preprocess.silver.event;
+import com.network.preprocess.model.EventResult;
 
 import com.network.preprocess.model.BronzeEvent;
 import com.network.preprocess.model.EventDefinition;
@@ -142,9 +143,41 @@ public final class SilverEventTransformer
          * EVENT_RESULT không nhận diện được vẫn được giữ lại
          * dưới dạng UNKNOWN vì EVENT_ID vẫn được model hỗ trợ.
          */
-        EventResultNormalization resultNormalization =
+        String rawEventResult =
+                bronzeEvent.eventResult();
+
+        Optional<EventResult> normalizedEventResult =
                 EventResultNormalizer.normalize(
-                        bronzeEvent.eventResult()
+                        rawEventResult
+                );
+
+        /*
+        * Không đưa category lạ vào Silver vì GoldFeatureEncoder
+        * chắc chắn không encode được category đó.
+        */
+        if (normalizedEventResult.isEmpty()) {
+        UnsupportedEventReason reason =
+                rawEventResult == null
+                        || rawEventResult.isBlank()
+                        ? UnsupportedEventReason
+                                .MISSING_EVENT_RESULT
+                        : UnsupportedEventReason
+                                .UNSUPPORTED_EVENT_RESULT;
+
+        return unsupported(
+                resolvedEvent,
+                reason,
+                processingTimeMillis
+        );
+        }
+
+        EventResult eventResult =
+                normalizedEventResult.get();
+
+        boolean eventResultChanged =
+                EventResultNormalizer.wasChanged(
+                        rawEventResult,
+                        eventResult
                 );
 
         /*
@@ -190,44 +223,23 @@ public final class SilverEventTransformer
         List<String> warnings =
                 new ArrayList<>();
 
-        if (eventIdChanged) {
-            warnings.add("EVENT_ID_NORMALIZED");
-        }
-
-        if (!resultNormalization.recognized()) {
-            /*
-             * EVENT_RESULT không nhận diện được.
-             *
-             * Event vẫn được đưa vào Silver nhưng eventResult
-             * sẽ là UNKNOWN.
-             */
-            warnings.add(
-                    "EVENT_RESULT_UNRECOGNIZED"
-            );
-        } else if (resultNormalization.changed()) {
-            /*
-             * EVENT_RESULT được nhận diện nhưng đã thay đổi
-             * cách biểu diễn.
-             *
-             * Ví dụ:
-             * " SUCCESS " -> "success"
-             */
-            warnings.add(
-                    "EVENT_RESULT_NORMALIZED"
-            );
-        }
+        if (eventResultChanged) {
+    warnings.add(
+            "EVENT_RESULT_NORMALIZED"
+    );
+}
 
         SilverQuality quality =
                 new SilverQuality(
                         resolvedEvent.resolutionSource(),
                         eventIdChanged,
-                        resultNormalization.changed(),
-                        resultNormalization.recognized(),
+                        eventResultChanged,
 
                         /*
-                         * Tạo immutable list để không ai có thể
-                         * thay đổi warnings sau khi tạo SilverEvent.
-                         */
+                        * Silver output chỉ chứa event result hợp lệ,
+                        * nên giá trị này luôn là true.
+                        */
+                        true,
                         warnings
                 );
 
@@ -240,9 +252,7 @@ public final class SilverEventTransformer
         SilverDisplay display =
                 new SilverDisplay(
                         eventDefinition.displayName(),
-                        resultNormalization
-                                .eventResult()
-                                .displayLabel()
+                        eventResult.displayLabel()
                 );
 
         /*
@@ -264,8 +274,19 @@ public final class SilverEventTransformer
                 );
 
         /*
-         * Bước 8: tạo SilverEvent hoàn chỉnh.
-         */
+        * Lấy kết quả event đã được chuẩn hóa.
+        *
+        * Giá trị đầu ra phải là category dạng chuỗi:
+        * - "success"
+        * - "reject"
+        *
+        * Không encode thành 0 hoặc 1 tại tầng Silver.
+        */
+        String eventResult = resultNormalization.eventResult();
+
+        /*
+        * Bước 8: tạo SilverEvent hoàn chỉnh.
+        */
         SilverEvent silverEvent =
                 new SilverEvent(
                         SILVER_SCHEMA_VERSION,
@@ -273,40 +294,47 @@ public final class SilverEventTransformer
                         bronzeEvent.rawRecordId(),
 
                         /*
-                         * Identity đã được resolve tại Checkpoint 7.
-                         */
+                        * Identity đã được resolve tại Checkpoint 7.
+                        */
                         resolvedEvent.ueKey(),
                         resolvedEvent.imsi(),
 
                         /*
-                         * Thông tin event đã chuẩn hóa.
-                         */
+                        * Category vẫn giữ ở dạng chuỗi.
+                        *
+                        * Ví dụ:
+                        * eventId     = "l_service_request"
+                        * eventResult = "success"
+                        *
+                        * GoldFeatureEncoder mới chuyển chúng thành ID.
+                        */
                         eventDefinition.canonicalEventId(),
-                        resultNormalization.eventResult(),
+                        eventResult,
 
                         /*
-                         * Numeric fields.
-                         */
+                        * Numeric fields giữ nguyên giá trị nguồn.
+                        * GoldFeatureEncoder mới thực hiện normalize.
+                        */
                         bronzeEvent.durationMs(),
                         bronzeEvent.requestRetries(),
                         subType,
 
                         /*
-                         * Thời gian và report side.
-                         */
+                        * Thời gian và report side.
+                        */
                         bronzeEvent.eventTime(),
                         reportSide,
 
                         /*
-                         * Các identity gốc phục vụ audit.
-                         */
+                        * Các identity gốc phục vụ audit.
+                        */
                         bronzeEvent.msisdn(),
                         bronzeEvent.mtmsi(),
                         bronzeEvent.imeisv(),
 
                         /*
-                         * Thông tin location và network node.
-                         */
+                        * Thông tin location và network node.
+                        */
                         bronzeEvent.mmegi(),
                         bronzeEvent.mmec(),
                         bronzeEvent.tac(),
@@ -315,23 +343,21 @@ public final class SilverEventTransformer
                         sgsn,
 
                         /*
-                         * Metadata đã chuẩn hóa.
-                         */
+                        * Metadata đã chuẩn hóa.
+                        */
                         display,
                         quality,
 
                         /*
-                         * Giữ dữ liệu gốc và Kafka metadata để
-                         * audit, truy vết và deduplicate.
-                         */
+                        * Giữ dữ liệu gốc và Kafka metadata để
+                        * Gold lấy cause/sub-cause và phục vụ audit.
+                        */
                         bronzeEvent.rawFields(),
                         bronzeEvent.source()
                 );
 
-        return SilverTransformationResult.supported(
-                silverEvent
-        );
-    }
+return SilverTransformationResult.supported(silverEvent);
+        }
 
     /**
      * Kiểm tra kết quả trả về từ EventCatalog.
@@ -407,17 +433,23 @@ public final class SilverEventTransformer
      * <p>Không đưa raw EVENT_ID vào message vì dữ liệu nguồn
      * có thể chứa text bất thường hoặc thông tin không nên ghi log.</p>
      */
-    private String safeMessage(
-            UnsupportedEventReason reason
-    ) {
-        return switch (reason) {
-            case MISSING_EVENT_ID ->
-                    "EVENT_ID is missing";
+        private String safeMessage(
+                UnsupportedEventReason reason
+        ) {
+                return switch (reason) {
+                        case MISSING_EVENT_ID ->
+                                "EVENT_ID is missing";
 
-            case UNSUPPORTED_EVENT_ID ->
-                    "EVENT_ID is not supported by the model catalog";
-        };
-    }
+                        case UNSUPPORTED_EVENT_ID ->
+                                "EVENT_ID is not supported by the model catalog";
+
+                        case MISSING_EVENT_RESULT ->
+                                "EVENT_RESULT is missing";
+
+                        case UNSUPPORTED_EVENT_RESULT ->
+                                "EVENT_RESULT is not supported by the feature contract";
+                };
+        }
 
     /**
      * Đọc một trường tùy chọn từ Bronze rawFields.

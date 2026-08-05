@@ -341,8 +341,7 @@ class GoldSequenceProcessFunctionTest {
                         32,
                         8,
                         86_400_000L,
-                        "gold-sequence-v1",
-                        "ue-seq-v1"
+                        "gold-ue-sequence-feature-v1"
                 );
 
         KeyedProcessOperator<
@@ -455,39 +454,54 @@ class GoldSequenceProcessFunctionTest {
             int index
     ) {
         return new GoldSequenceEvent(
-                "452040000000001",
-                "452040000000001",
+        "452040000000001",
+        "452040000000001",
+
+        "l_service_request",
+
+        /*
+         * Field compatibility cũ.
+         * l_service_request có ID 8 theo contract.
+         */
+        8,
+
+        "success",
+        1,
+
+        /*
+         * Cause rỗng là category hợp lệ, ID 1.
+         */
+        "",
+        "",
+
+        /*
+         * Numeric source.
+         */
+        100L + index,
+        index % 3,
+
+        BASE_TIME.plusSeconds(index),
+
+        Map.of(
+                "CAUSE_CODE", "",
+                "SUB_CAUSE_CODE", "",
+                "REQUEST_RETRIES",
+                Integer.toString(index % 3)
+        ),
+
+        Map.of(
+                "EVENT_ID",
                 "l_service_request",
-                3,
-                "success",
-                1,
-                100L + index,
-                BASE_TIME.plusSeconds(index),
-                Map.of(
-                        "REQUEST_RETRIES",
-                        Integer.toString(index % 3),
-                        "PAGING_ATTEMPTS",
-                        Integer.toString(index % 2)
-                ),
-                Map.of(
-                        "EVENT_ID",
-                        "l_service_request",
-                        "EVENT_RESULT",
-                        "success",
-                        "IMSI",
-                        "452040000000001",
-                        "TAC",
-                        "1001",
-                        "ECI",
-                        "20001"
-                ),
-                Map.of(
-                        "supported",
-                        "true",
-                        "event_time_quality",
-                        "source"
-                ),
-                "raw-record-" + index
+                "EVENT_RESULT",
+                "success"
+        ),
+
+        Map.of(
+                "supported",
+                "true"
+        ),
+
+        "raw-record-" + index
         );
     }
 }

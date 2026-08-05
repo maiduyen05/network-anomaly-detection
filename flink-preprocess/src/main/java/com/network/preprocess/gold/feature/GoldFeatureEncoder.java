@@ -131,7 +131,7 @@ public final class GoldFeatureEncoder
             /*
              * x_cat[timestep][2] = normalized_cause_code.
              *
-             * Chuỗi rỗng là category hợp lệ và trả về ID 1.
+             * Chuỗi rỗng là category hợp lệ và trả về ID 0.
              */
             xCat[timestep][2] =
                     normalizedCauseVocabulary.encode(
@@ -141,7 +141,7 @@ public final class GoldFeatureEncoder
             /*
              * x_cat[timestep][3] = sub_cause_code.
              *
-             * Chuỗi rỗng cũng là category hợp lệ và trả về ID 1.
+             * Chuỗi rỗng cũng là category hợp lệ và trả về ID 0.
              */
             xCat[timestep][3] =
                     subCauseVocabulary.encode(

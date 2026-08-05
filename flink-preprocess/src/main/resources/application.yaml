@@ -146,15 +146,50 @@ silver:
   # Không tự động coi mọi EVENT_ID raw là hợp lệ vì Gold và model
   # cần một vocabulary ổn định.
   supported-events:
+    - alias: l_attach
+      canonical-event-id: l_attach
+      display-name: LTE Attach
+
+    - alias: l_bearer_modify
+      canonical-event-id: l_bearer_modify
+      display-name: LTE Bearer Modify
+
+    - alias: l_dedicated_bearer_activate
+      canonical-event-id: l_dedicated_bearer_activate
+      display-name: LTE Dedicated Bearer Activate
+
+    - alias: l_dedicated_bearer_deactivate
+      canonical-event-id: l_dedicated_bearer_deactivate
+      display-name: LTE Dedicated Bearer Deactivate
+
+    - alias: l_detach
+      canonical-event-id: l_detach
+      display-name: LTE Detach
+
+    - alias: l_handover
+      canonical-event-id: l_handover
+      display-name: LTE Handover
+
+    - alias: l_pdn_connect
+      canonical-event-id: l_pdn_connect
+      display-name: LTE PDN Connect
+
     - alias: l_service_request
       canonical-event-id: l_service_request
       display-name: LTE Service Request
+
+    - alias: l_tau
+      canonical-event-id: l_tau
+      display-name: LTE Tracking Area Update
 
 
 gold:
   # Topic đầu vào của Gold job.
   # Dữ liệu được lấy từ output của Silver job.
   input-topic: silver.ue.event
+
+  # Phiên bản feature contract dùng để encode tensor gold.
+  feature-version: gold-ue-sequence-feature-v1
 
   # Topic chứa các chuỗi sự kiện UE đã được tạo để phục vụ
   # phân tích, machine learning hoặc downstream processing.
@@ -175,10 +210,6 @@ gold:
   # sequence tiếp theo dùng event 9-40.
   sequence-stride: 8
 
-  # Phiên bản của bộ feature được tạo từ chuỗi UE event.
-  # Dùng để phân biệt khi logic tạo feature thay đổi.
-  feature-version: ue-seq-v1
-
   # Gold phải tạo lại watermark vì watermark không được Kafka
   # truyền từ Silver Job sang Gold Job.
   watermark-max-out-of-orderness-ms: 30000
@@ -186,17 +217,6 @@ gold:
 
   # State theo UE tồn tại tối đa một ngày không được cập nhật.
   state-ttl-ms: 86400000
-
-
-flink:
-  # Số lượng subtask mặc định chạy song song cho các operator.
-  # Parallelism 3 nghĩa là mỗi operator có thể có 3 instance xử lý đồng thời.
-  parallelism: 3
-
-  # Khoảng thời gian giữa hai lần Flink thực hiện checkpoint.
-  # 60.000 ms tương đương 60 giây.
-  checkpoint-interval-ms: 60000
-
 feature-contract:
   feature-version: gold-ue-sequence-feature-v1
 
@@ -255,10 +275,10 @@ feature-contract:
 
         # Chuỗi rỗng là category hợp lệ, không phải missing.
         vocabulary:
-          "": 1
-          "10": 2
-          "38": 3
-          "9": 4
+          "": 0
+          "10": 1
+          "38": 2
+          "9": 3
 
       - index: 3
         name: sub_cause_code
@@ -267,13 +287,13 @@ feature-contract:
 
         # Chuỗi rỗng là category hợp lệ, không phải missing.
         vocabulary:
-          "": 1
-          "107": 2
-          "11": 3
-          "14": 4
-          "403": 5
-          "410": 6
-          "413": 7
+          "": 0
+          "107": 1
+          "11": 2
+          "14": 3
+          "403": 4
+          "410": 5
+          "413": 6
 
   numeric:
     dtype: FLOAT32

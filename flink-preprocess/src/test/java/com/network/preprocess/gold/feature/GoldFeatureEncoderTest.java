@@ -25,8 +25,8 @@ class GoldFeatureEncoderTest {
          *
          * l_attach → 1
          * reject   → 0
-         * "" cause → 1
-         * "" sub   → 1
+         * "" cause → 0
+         * "" sub   → 0
          * duration 0 → 0.0
          * retries 0  → 0.0
          */
@@ -46,8 +46,8 @@ class GoldFeatureEncoderTest {
          *
          * l_service_request → 8
          * success           → 1
-         * cause 10          → 2
-         * sub cause 107     → 2
+         * cause 10          → 1
+         * sub cause 107     → 1
          * max duration      → 1.0
          * max retries       → 1.0
          */
@@ -94,12 +94,12 @@ class GoldFeatureEncoderTest {
         assertEquals(2, xNum[0].length);
 
         assertArrayEquals(
-                new long[]{1L, 0L, 1L, 1L},
+                new long[]{1L, 0L, 0L, 0L},
                 xCat[0]
         );
 
         assertArrayEquals(
-                new long[]{8L, 1L, 2L, 2L},
+                new long[]{8L, 1L, 1L, 1L},
                 xCat[1]
         );
 
@@ -120,11 +120,11 @@ class GoldFeatureEncoderTest {
          *
          * l_tau → 9
          * success → 1
-         * cause "9" → 4
-         * sub cause "413" → 7
+         * cause "9" → 3
+         * sub cause "413" → 6
          */
         assertArrayEquals(
-                new long[]{9L, 1L, 4L, 7L},
+                new long[]{9L, 1L, 3L, 6L},
                 xCat[2]
         );
 

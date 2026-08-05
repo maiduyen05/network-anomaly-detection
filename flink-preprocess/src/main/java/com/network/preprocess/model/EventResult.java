@@ -5,41 +5,28 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.io.Serializable;
 
 /**
- * Kết quả sự kiện đã được chuẩn hóa tại Silver.
- *
- * <p>Không giữ tùy ý mọi giá trị raw trong field eventResult.
- * Những giá trị raw không nhận diện được sẽ được chuyển thành
- * {@link #UNKNOWN} và đánh dấu trong SilverQuality.</p>
+ * Kết quả sự kiện được feature contract hỗ trợ.
  */
 public enum EventResult implements Serializable {
+
+    REJECT(
+            "reject",
+            "Reject"
+    ),
 
     SUCCESS(
             "success",
             "Success"
-    ),
-
-    FAILURE(
-            "failure",
-            "Failure"
-    ),
-
-    TIMEOUT(
-            "timeout",
-            "Timeout"
-    ),
-
-    UNKNOWN(
-            "unknown",
-            "Unknown"
     );
 
     /**
-     * Giá trị ổn định được ghi ra JSON/Kafka.
+     * Giá trị canonical được ghi ra JSON/Kafka
+     * và được GoldFeatureEncoder sử dụng.
      */
     private final String wireValue;
 
     /**
-     * Nhãn thân thiện cho dashboard hoặc UI.
+     * Nhãn thân thiện dùng cho dashboard.
      */
     private final String displayLabel;
 
@@ -51,9 +38,6 @@ public enum EventResult implements Serializable {
         this.displayLabel = displayLabel;
     }
 
-    /**
-     * @JsonValue giúp Jackson ghi "success" thay vì "SUCCESS".
-     */
     @JsonValue
     public String wireValue() {
         return wireValue;
