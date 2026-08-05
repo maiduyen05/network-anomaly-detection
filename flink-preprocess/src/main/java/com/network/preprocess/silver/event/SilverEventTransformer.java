@@ -1,7 +1,7 @@
 package com.network.preprocess.silver.event;
-import com.network.preprocess.model.EventResult;
 
 import com.network.preprocess.model.BronzeEvent;
+import com.network.preprocess.model.EventResult;
 import com.network.preprocess.model.EventDefinition;
 import com.network.preprocess.model.IdentityResolvedEvent;
 import com.network.preprocess.model.SilverDisplay;
@@ -138,10 +138,11 @@ public final class SilverEventTransformer
                 definition.get();
 
         /*
-         * Bước 3: chuẩn hóa EVENT_RESULT.
+         * Bước 3: chuẩn hóa EVENT_RESULT theo feature contract.
          *
-         * EVENT_RESULT không nhận diện được vẫn được giữ lại
-         * dưới dạng UNKNOWN vì EVENT_ID vẫn được model hỗ trợ.
+         * Chỉ hai category "reject" và "success" được phép đi tiếp.
+         * Giá trị thiếu hoặc nằm ngoài vocabulary được route sang
+         * unsupported-event để Gold không nhận category không encode được.
          */
         String rawEventResult =
                 bronzeEvent.eventResult();
@@ -152,23 +153,23 @@ public final class SilverEventTransformer
                 );
 
         /*
-        * Không đưa category lạ vào Silver vì GoldFeatureEncoder
-        * chắc chắn không encode được category đó.
-        */
+         * Không đưa category lạ vào Silver vì GoldFeatureEncoder
+         * không thể encode category nằm ngoài feature contract.
+         */
         if (normalizedEventResult.isEmpty()) {
-        UnsupportedEventReason reason =
-                rawEventResult == null
-                        || rawEventResult.isBlank()
-                        ? UnsupportedEventReason
-                                .MISSING_EVENT_RESULT
-                        : UnsupportedEventReason
-                                .UNSUPPORTED_EVENT_RESULT;
+            UnsupportedEventReason reason =
+                    rawEventResult == null
+                            || rawEventResult.isBlank()
+                            ? UnsupportedEventReason
+                                    .MISSING_EVENT_RESULT
+                            : UnsupportedEventReason
+                                    .UNSUPPORTED_EVENT_RESULT;
 
-        return unsupported(
-                resolvedEvent,
-                reason,
-                processingTimeMillis
-        );
+            return unsupported(
+                    resolvedEvent,
+                    reason,
+                    processingTimeMillis
+            );
         }
 
         EventResult eventResult =
@@ -223,11 +224,17 @@ public final class SilverEventTransformer
         List<String> warnings =
                 new ArrayList<>();
 
+        if (eventIdChanged) {
+            warnings.add(
+                    "EVENT_ID_NORMALIZED"
+            );
+        }
+
         if (eventResultChanged) {
-    warnings.add(
-            "EVENT_RESULT_NORMALIZED"
-    );
-}
+            warnings.add(
+                    "EVENT_RESULT_NORMALIZED"
+            );
+        }
 
         SilverQuality quality =
                 new SilverQuality(
@@ -274,19 +281,8 @@ public final class SilverEventTransformer
                 );
 
         /*
-        * Lấy kết quả event đã được chuẩn hóa.
-        *
-        * Giá trị đầu ra phải là category dạng chuỗi:
-        * - "success"
-        * - "reject"
-        *
-        * Không encode thành 0 hoặc 1 tại tầng Silver.
-        */
-        String eventResult = resultNormalization.eventResult();
-
-        /*
-        * Bước 8: tạo SilverEvent hoàn chỉnh.
-        */
+         * Bước 8: tạo SilverEvent hoàn chỉnh.
+         */
         SilverEvent silverEvent =
                 new SilverEvent(
                         SILVER_SCHEMA_VERSION,
@@ -300,14 +296,12 @@ public final class SilverEventTransformer
                         resolvedEvent.imsi(),
 
                         /*
-                        * Category vẫn giữ ở dạng chuỗi.
-                        *
-                        * Ví dụ:
-                        * eventId     = "l_service_request"
-                        * eventResult = "success"
-                        *
-                        * GoldFeatureEncoder mới chuyển chúng thành ID.
-                        */
+                         * EVENT_ID giữ ở dạng chuỗi canonical.
+                         * EVENT_RESULT giữ ở dạng enum domain; khi ghi JSON,
+                         * @JsonValue serialize enum thành "success"/"reject".
+                         *
+                         * GoldFeatureEncoder mới chuyển category thành ID.
+                         */
                         eventDefinition.canonicalEventId(),
                         eventResult,
 
@@ -356,8 +350,10 @@ public final class SilverEventTransformer
                         bronzeEvent.source()
                 );
 
-return SilverTransformationResult.supported(silverEvent);
-        }
+        return SilverTransformationResult.supported(
+                silverEvent
+        );
+    }
 
     /**
      * Kiểm tra kết quả trả về từ EventCatalog.
