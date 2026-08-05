@@ -341,6 +341,15 @@ class GoldSequenceProcessFunctionTest {
                         32,
                         8,
                         86_400_000L,
+
+                        /*
+                         * Phiên bản schema của GoldSequenceWindow.
+                         */
+                        "gold-sequence-v1",
+
+                        /*
+                         * Phiên bản feature contract dùng bởi model.
+                         */
                         "gold-ue-sequence-feature-v1"
                 );
 
@@ -469,7 +478,7 @@ class GoldSequenceProcessFunctionTest {
         1,
 
         /*
-         * Cause rỗng là category hợp lệ, ID 1.
+         * Cause rỗng là category hợp lệ, ID 0.
          */
         "",
         "",
