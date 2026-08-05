@@ -184,39 +184,68 @@ silver:
 
 
 gold:
-  # Topic đầu vào của Gold job.
-  # Dữ liệu được lấy từ output của Silver job.
+  # Tên Gold Job hiển thị trên Flink Web UI.
+  job-name: flink-gold-v1
+
+  # Gold đọc các event đã được chuẩn hóa từ tầng Silver.
   input-topic: silver.ue.event
 
-  # Phiên bản feature contract dùng để encode tensor gold.
-  feature-version: gold-ue-sequence-feature-v1
-
-  # Topic chứa các chuỗi sự kiện UE đã được tạo để phục vụ
-  # phân tích, machine learning hoặc downstream processing.
+  # Main output chứa sample model-ready:
+  # - tensor x_cat[32][4];
+  # - tensor x_num[32][2];
+  # - metadata window;
+  # - evidence của 32 event nguồn.
   output-topic: gold.ue.sequence
 
-  # Consumer group của Gold Flink job.
+  # Event đến sau watermark được ghi vào topic này.
+  too-late-event-topic: gold-too-late-event
+
+  # Window vi phạm feature contract được ghi vào topic này.
+  invalid-feature-topic: invalid-gold-feature
+
+  # Consumer group riêng của Gold.
   consumer-group-id: flink-gold-v1
 
-  # Phiên bản schema của dữ liệu sequence được ghi ra Gold topic.
+  # Mỗi Kafka sink EXACTLY_ONCE phải có một prefix riêng.
+  #
+  # Không dùng chung prefix giữa:
+  # - main output;
+  # - too-late output;
+  # - invalid-feature output.
+  output-transactional-id-prefix: flink-gold-output-v1-
+  too-late-event-transactional-id-prefix: flink-gold-too-late-v1-
+  invalid-feature-transactional-id-prefix: flink-gold-invalid-feature-v1-
+
+  # Schema của sample Gold hợp lệ.
   output-schema-version: gold-sequence-v1
 
-  # Số lượng event tối đa trong một sequence.
-  # Mỗi sequence sẽ chứa 32 event liên tiếp.
+  # Schema của record được route sang invalid-gold-feature.
+  invalid-feature-schema-version: invalid-gold-feature-v1
+
+  # Phiên bản feature contract dùng để tạo tensor.
+  feature-version: gold-ue-sequence-feature-v1
+
+  # Mỗi sample gồm đúng 32 event liên tiếp của một UE.
   sequence-length: 32
 
-  # Số event dịch chuyển khi tạo sequence tiếp theo.
-  # Ví dụ sequence đầu dùng event 1-32,
-  # sequence tiếp theo dùng event 9-40.
+  # Sau khi phát một sample, dịch cửa sổ 8 event.
+  #
+  # Sample 1: event 1..32
+  # Sample 2: event 9..40
+  # Sample 3: event 17..48
   sequence-stride: 8
 
-  # Gold phải tạo lại watermark vì watermark không được Kafka
-  # truyền từ Silver Job sang Gold Job.
+  # Gold phải tạo watermark mới vì watermark của Silver Job
+  # không được lưu hoặc truyền qua Kafka.
   watermark-max-out-of-orderness-ms: 30000
+
+  # Nếu một Kafka partition im lặng 60 giây,
+  # không để partition đó giữ watermark chung.
   watermark-idleness-ms: 60000
 
-  # State theo UE tồn tại tối đa một ngày không được cập nhật.
+  # State theo UE hết hạn sau một ngày không được cập nhật.
   state-ttl-ms: 86400000
+
 feature-contract:
   feature-version: gold-ue-sequence-feature-v1
 

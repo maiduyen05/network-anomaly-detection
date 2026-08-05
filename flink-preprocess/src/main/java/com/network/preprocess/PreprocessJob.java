@@ -1,6 +1,7 @@
 package com.network.preprocess;
 
 import com.network.preprocess.bronze.BronzeJob;
+import com.network.preprocess.gold.GoldJob;
 import com.network.preprocess.silver.SilverJob;
 
 import java.util.Arrays;
@@ -9,28 +10,30 @@ import java.util.Locale;
 /**
  * Entry point mặc định của flink-preprocess fat JAR.
  *
- * <p>Cho phép cùng một JAR khởi động từng tầng độc lập:</p>
+ * <p>Cùng một JAR có thể khởi động từng tầng độc lập:</p>
  *
  * <pre>
  * java -jar flink-preprocess.jar bronze
  * java -jar flink-preprocess.jar silver
+ * java -jar flink-preprocess.jar gold
  * </pre>
  *
- * <p>Trong Flink production vẫn có thể dùng -c để chỉ định trực tiếp
- * BronzeJob hoặc SilverJob.</p>
+ * <p>Ba tầng là ba Flink Job độc lập và giao tiếp qua Kafka.</p>
  */
 public final class PreprocessJob {
 
     private PreprocessJob() {
     }
 
-    public static void main(String[] args)
-            throws Exception {
+    public static void main(
+            String[] args
+    ) throws Exception {
 
         if (args == null || args.length == 0) {
             throw new IllegalArgumentException(
                     "Missing pipeline layer. "
-                            + "Usage: PreprocessJob bronze|silver"
+                            + "Usage: PreprocessJob "
+                            + "bronze|silver|gold"
             );
         }
 
@@ -40,8 +43,8 @@ public final class PreprocessJob {
                         .toLowerCase(Locale.ROOT);
 
         /*
-         * Bỏ đối số đầu tiên trước khi chuyển phần còn lại
-         * cho entry point của từng job.
+         * Bỏ đối số đầu tiên trước khi chuyển các đối số còn lại
+         * cho entry point của tầng tương ứng.
          */
         String[] forwardedArgs =
                 Arrays.copyOfRange(
@@ -52,16 +55,25 @@ public final class PreprocessJob {
 
         switch (layer) {
             case "bronze" ->
-                    BronzeJob.main(forwardedArgs);
+                    BronzeJob.main(
+                            forwardedArgs
+                    );
 
             case "silver" ->
-                    SilverJob.main(forwardedArgs);
+                    SilverJob.main(
+                            forwardedArgs
+                    );
+
+            case "gold" ->
+                    GoldJob.main(
+                            forwardedArgs
+                    );
 
             default ->
                     throw new IllegalArgumentException(
                             "Unsupported pipeline layer: "
                                     + args[0]
-                                    + ". Expected bronze or silver."
+                                    + ". Expected bronze, silver or gold."
                     );
         }
     }

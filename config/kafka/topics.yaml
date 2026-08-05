@@ -62,3 +62,15 @@ topics:
     producer: inference-service
     consumers:
       - nwdaf-adapter
+
+  gold_too_late_event:
+    name: gold-too-late-event
+    producer: flink-gold
+    consumers:
+      - operations
+
+  invalid_gold_feature:
+    name: invalid-gold-feature
+    producer: flink-gold
+    consumers:
+      - operations
