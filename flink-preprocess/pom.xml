@@ -53,6 +53,30 @@
         <maven.shade.plugin.version>3.6.0</maven.shade.plugin.version>
     </properties>
 
+        <!--
+        Quản lý thống nhất phiên bản của toàn bộ thư viện Jackson.
+
+        Jackson gồm nhiều module:
+        - jackson-core
+        - jackson-annotations
+        - jackson-databind
+        - jackson-dataformat-yaml
+
+        Các module này phải dùng cùng một release để tránh lỗi
+        NoSuchMethodError khi chạy test hoặc chạy Flink job.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
 
         <!--
@@ -139,18 +163,26 @@
             <version>${flink.kafka.connector.version}</version>
         </dependency>
 
-        <!-- Chuyển JSON Kafka thành Java object và ngược lại. -->
+        <!--
+            Chuyển JSON Kafka thành Java object và ngược lại.
+
+            Version được quản lý tập trung bởi jackson-bom,
+            không khai báo riêng tại dependency này.
+        -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
-        <!-- Đọc file application.yaml. -->
+        <!--
+            Đọc application.yaml.
+
+            Jackson BOM bảo đảm YAML, Databind, Core và Annotations
+            đều sử dụng cùng phiên bản 2.17.2.
+        -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-            <version>${jackson.version}</version>
         </dependency>
 
         <!--

@@ -7,6 +7,8 @@ import org.apache.flink.api.common.functions.MapFunction;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 
 /**
  * Chuyển SilverEvent thành event trung gian của tầng Gold.
@@ -107,6 +109,97 @@ public final class GoldSequenceEventMapper
          */
         goldEvent.setFeatureSourceFields(
                 rawFields
+        );
+
+        /*
+         * =========================================================
+         * DISPLAY EVIDENCE
+         * =========================================================
+         *
+         * Đây là metadata dành cho UI và điều tra.
+         * Không feature nào đọc dữ liệu từ map này.
+         */
+        Map<String, String> displayFields =
+                new LinkedHashMap<>();
+
+        displayFields.put(
+                "event_name",
+                silverEvent.display().eventName()
+        );
+
+        displayFields.put(
+                "event_result_label",
+                silverEvent.display().eventResultLabel()
+        );
+
+        goldEvent.setDisplayFields(
+                displayFields
+        );
+
+        /*
+         * =========================================================
+         * QUALITY EVIDENCE
+         * =========================================================
+         *
+         * Giữ thông tin Silver đã chuẩn hóa event và identity
+         * như thế nào.
+         */
+        Map<String, String> qualityFields =
+                new LinkedHashMap<>();
+
+        qualityFields.put(
+                "identity_resolution_source",
+                silverEvent
+                        .quality()
+                        .identityResolutionSource()
+                        .name()
+                        .toLowerCase(Locale.ROOT)
+        );
+
+        qualityFields.put(
+                "event_id_changed",
+                Boolean.toString(
+                        silverEvent
+                                .quality()
+                                .eventIdChanged()
+                )
+        );
+
+        qualityFields.put(
+                "event_result_changed",
+                Boolean.toString(
+                        silverEvent
+                                .quality()
+                                .eventResultChanged()
+                )
+        );
+
+        qualityFields.put(
+                "event_result_recognized",
+                Boolean.toString(
+                        silverEvent
+                                .quality()
+                                .eventResultRecognized()
+                )
+        );
+
+        /*
+         * Map chỉ chứa String nên danh sách warning được nối bằng "|".
+         *
+         * Không có warning → chuỗi rỗng.
+         */
+        qualityFields.put(
+                "warnings",
+                String.join(
+                        "|",
+                        silverEvent
+                                .quality()
+                                .warnings()
+                )
+        );
+
+        goldEvent.setQualityFields(
+                qualityFields
         );
 
         /*
