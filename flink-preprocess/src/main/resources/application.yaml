@@ -196,3 +196,105 @@ flink:
   # Khoảng thời gian giữa hai lần Flink thực hiện checkpoint.
   # 60.000 ms tương đương 60 giây.
   checkpoint-interval-ms: 60000
+
+feature-contract:
+  feature-version: gold-ue-sequence-feature-v1
+
+  sequence:
+    length: 32
+    stride: 8
+    padding-side: LEFT
+
+    # Chỉ phát sample khi đã đủ 32 event.
+    # Do đó tensor thực tế không chứa timestep padding.
+    emit-partial-windows: false
+
+  categorical:
+    dtype: INT64
+    feature-count: 4
+
+    normalization:
+      trim: true
+      lowercase: true
+
+    ordering: LEXICOGRAPHIC_ASCENDING
+
+    # Không dùng padding-id, unknown-id hoặc missing-id vì các ID
+    # 0, 1, 2... đang được category thật sử dụng.
+    unknown-policy: REJECT
+    missing-policy: REJECT
+
+    features:
+      - index: 0
+        name: event_code
+        source: eventId
+        transform: fixed_vocabulary_lookup
+        vocabulary:
+          l_attach: 1
+          l_bearer_modify: 2
+          l_dedicated_bearer_activate: 3
+          l_dedicated_bearer_deactivate: 4
+          l_detach: 5
+          l_handover: 6
+          l_pdn_connect: 7
+          l_service_request: 8
+          l_tau: 9
+
+      - index: 1
+        name: event_result_code
+        source: eventResult
+        transform: fixed_vocabulary_lookup
+        vocabulary:
+          reject: 0
+          success: 1
+
+      - index: 2
+        name: normalized_cause_code
+        source: rawFields.CAUSE_CODE
+        transform: fixed_vocabulary_lookup
+
+        # Chuỗi rỗng là category hợp lệ, không phải missing.
+        vocabulary:
+          "": 1
+          "10": 2
+          "38": 3
+          "9": 4
+
+      - index: 3
+        name: sub_cause_code
+        source: rawFields.SUB_CAUSE_CODE
+        transform: fixed_vocabulary_lookup
+
+        # Chuỗi rỗng là category hợp lệ, không phải missing.
+        vocabulary:
+          "": 1
+          "107": 2
+          "11": 3
+          "14": 4
+          "403": 5
+          "410": 6
+          "413": 7
+
+  numeric:
+    dtype: FLOAT32
+    feature-count: 2
+
+    missing-value: -1.0
+    normalized-valid-range:
+      min: 0.0
+      max: 1.0
+
+    features:
+      - index: 0
+        name: duration_ms
+        source: durationMs
+        raw-clip-min: 0
+        raw-clip-max: 600000
+        transform: log1p_minmax
+
+      - index: 1
+        name: request_retries
+        source: requestRetries
+        raw-clip-min: 0
+        raw-clip-max: 10
+        transform: clipped_minmax

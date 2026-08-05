@@ -45,11 +45,53 @@ public class GoldSequenceEvent implements Serializable {
 
     private String ueKey;
     private String imsi;
+
+    /*
+     * =========================================================
+     * Dữ liệu nguồn dùng bởi GoldFeatureEncoder
+     * =========================================================
+     *
+     * Các categorical field phải giữ nguyên ở dạng chuỗi.
+     *
+     * Ví dụ:
+     *
+     * eventId = "l_service_request"
+     *
+     * Không được lưu ID đã encode:
+     *
+     * eventId = "8"
+     *
+     * GoldFeatureEncoder chịu trách nhiệm chuyển category thành ID.
+     */
+
     private String eventId;
-    private int eventCode;
     private String eventResult;
+    private String normalizedCauseCode;
+    private String subCauseCode;
+
+    /*
+     * Dùng wrapper type để biểu diễn được trường hợp thiếu dữ liệu.
+     *
+     * null khác với 0:
+     *
+     * durationMs = null       → không có dữ liệu
+     * durationMs = 0L         → duration thực sự bằng 0
+     *
+     * requestRetries = null   → không có dữ liệu
+     * requestRetries = 0      → không retry
+     */
+    private Long durationMs;
+    private Integer requestRetries;
+
+    /*
+     * Hai field này được giữ lại từ Checkpoint 11 để không làm hỏng
+     * các file đang sử dụng GoldSequenceEvent.
+     *
+     * GoldFeatureEncoder mới không lấy category từ hai field này.
+     * Encoder phải đọc eventId và eventResult ở dạng chuỗi nguồn.
+     */
+    private int eventCode;
     private int eventResultCode;
-    private long durationMs;
 
     /**
      * Lưu timestamp dưới dạng long thay vì Instant.
@@ -81,6 +123,9 @@ public class GoldSequenceEvent implements Serializable {
 
     /**
      * Constructor đầy đủ được code nghiệp vụ và unit test sử dụng.
+     *
+     * <p>Các category được truyền vào constructor dưới dạng chuỗi nguồn.
+     * Constructor không thực hiện encode feature.</p>
      */
     public GoldSequenceEvent(
             String ueKey,
@@ -89,7 +134,10 @@ public class GoldSequenceEvent implements Serializable {
             int eventCode,
             String eventResult,
             int eventResultCode,
-            long durationMs,
+            String normalizedCauseCode,
+            String subCauseCode,
+            Long durationMs,
+            Integer requestRetries,
             Instant eventTime,
             Map<String, String> featureSourceFields,
             Map<String, String> displayFields,
@@ -98,12 +146,43 @@ public class GoldSequenceEvent implements Serializable {
     ) {
         this.ueKey = requiredText(ueKey, "ueKey");
         this.imsi = requiredText(imsi, "imsi");
+
+        /*
+         * eventId và eventResult vẫn là category dạng chuỗi.
+         *
+         * Ví dụ:
+         *
+         * eventId = "l_service_request"
+         * eventResult = "success"
+         */
         this.eventId = requiredText(eventId, "eventId");
-        this.eventCode = eventCode;
         this.eventResult =
                 requiredText(eventResult, "eventResult");
-        this.eventResultCode = eventResultCode;
+
+        /*
+         * Hai cause field có thể là chuỗi rỗng.
+         *
+         * Chuỗi rỗng đang là một category hợp lệ trong vocabulary,
+         * vì vậy không dùng requiredText() cho hai field này.
+         */
+        this.normalizedCauseCode = normalizedCauseCode;
+        this.subCauseCode = subCauseCode;
+
+        /*
+         * Numeric source giữ nguyên giá trị nguồn.
+         *
+         * GoldFeatureEncoder mới chịu trách nhiệm clip,
+         * normalize hoặc chuyển giá trị thiếu.
+         */
         this.durationMs = durationMs;
+        this.requestRetries = requestRetries;
+
+        /*
+         * Giữ lại hai giá trị của Checkpoint 11 để tương thích
+         * với những phần code cũ đang sử dụng.
+         */
+        this.eventCode = eventCode;
+        this.eventResultCode = eventResultCode;
 
         this.eventTimeEpochMs =
                 Objects.requireNonNull(
@@ -156,8 +235,65 @@ public class GoldSequenceEvent implements Serializable {
         return eventId;
     }
 
+    /**
+     * Nhận category dạng chuỗi, không nhận vocabulary ID.
+     *
+     * <p>Đúng: setEventId("l_service_request")</p>
+     * <p>Sai: setEventId("8")</p>
+     */
     public void setEventId(String eventId) {
         this.eventId = eventId;
+    }
+
+    public String getEventResult() {
+        return eventResult;
+    }
+
+    /**
+     * Nhận category dạng chuỗi, ví dụ "success" hoặc "reject".
+     */
+    public void setEventResult(String eventResult) {
+        this.eventResult = eventResult;
+    }
+
+    public String getNormalizedCauseCode() {
+        return normalizedCauseCode;
+    }
+
+    /**
+     * Giữ category nguồn, bao gồm cả chuỗi rỗng.
+     */
+    public void setNormalizedCauseCode(
+            String normalizedCauseCode
+    ) {
+        this.normalizedCauseCode = normalizedCauseCode;
+    }
+
+    public String getSubCauseCode() {
+        return subCauseCode;
+    }
+
+    /**
+     * Giữ category nguồn, bao gồm cả chuỗi rỗng.
+     */
+    public void setSubCauseCode(String subCauseCode) {
+        this.subCauseCode = subCauseCode;
+    }
+
+    public Long getDurationMs() {
+        return durationMs;
+    }
+
+    public void setDurationMs(Long durationMs) {
+        this.durationMs = durationMs;
+    }
+
+    public Integer getRequestRetries() {
+        return requestRetries;
+    }
+
+    public void setRequestRetries(Integer requestRetries) {
+        this.requestRetries = requestRetries;
     }
 
     public int getEventCode() {
@@ -168,28 +304,12 @@ public class GoldSequenceEvent implements Serializable {
         this.eventCode = eventCode;
     }
 
-    public String getEventResult() {
-        return eventResult;
-    }
-
-    public void setEventResult(String eventResult) {
-        this.eventResult = eventResult;
-    }
-
     public int getEventResultCode() {
         return eventResultCode;
     }
 
     public void setEventResultCode(int eventResultCode) {
         this.eventResultCode = eventResultCode;
-    }
-
-    public long getDurationMs() {
-        return durationMs;
-    }
-
-    public void setDurationMs(long durationMs) {
-        this.durationMs = durationMs;
     }
 
     public long getEventTimeEpochMs() {
@@ -246,15 +366,12 @@ public class GoldSequenceEvent implements Serializable {
      * Accessor kiểu record
      * =========================================================
      *
-     * Các method này giúp những file đã viết ở Checkpoint 11
-     * tiếp tục dùng:
+     * Giữ lại để code đã viết ở Checkpoint 11 tiếp tục gọi:
      *
      * event.ueKey()
+     * event.eventId()
      * event.eventTime()
      * event.sourceOrderKey()
-     *
-     * Vì vậy không cần sửa GoldSequenceProcessFunction,
-     * GoldSequenceWindowFactory hoặc các test hiện tại.
      */
 
     public String ueKey() {
@@ -269,20 +386,32 @@ public class GoldSequenceEvent implements Serializable {
         return eventId;
     }
 
-    public int eventCode() {
-        return eventCode;
-    }
-
     public String eventResult() {
         return eventResult;
     }
 
-    public int eventResultCode() {
-        return eventResultCode;
+    public String normalizedCauseCode() {
+        return normalizedCauseCode;
     }
 
-    public long durationMs() {
+    public String subCauseCode() {
+        return subCauseCode;
+    }
+
+    public Long durationMs() {
         return durationMs;
+    }
+
+    public Integer requestRetries() {
+        return requestRetries;
+    }
+
+    public int eventCode() {
+        return eventCode;
+    }
+
+    public int eventResultCode() {
+        return eventResultCode;
     }
 
     /**
@@ -308,6 +437,9 @@ public class GoldSequenceEvent implements Serializable {
         return sourceOrderKey;
     }
 
+    /**
+     * Kiểm tra các trường bắt buộc không được null hoặc rỗng.
+     */
     private static String requiredText(
             String value,
             String fieldName
@@ -321,6 +453,9 @@ public class GoldSequenceEvent implements Serializable {
         return value.trim();
     }
 
+    /**
+     * Tạo một mutable Map mới để Flink có thể copy object an toàn.
+     */
     private static Map<String, String> mutableCopy(
             Map<String, String> source
     ) {
