@@ -5,10 +5,12 @@ import com.network.preprocess.gold.feature
 import com.network.preprocess.model.GoldSequenceSample;
 import com.network.preprocess.model.GoldSequenceWindow;
 import com.network.preprocess.model.InvalidGoldFeatureRecord;
+import com.network.preprocess.config.GoldFeatureContract;
 import org.apache.flink.streaming.api.functions
         .ProcessFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
+
 
 import java.time.Instant;
 import java.util.Objects;
@@ -50,23 +52,30 @@ public final class GoldFeatureProcessFunction
     private final String invalidRecordSchemaVersion;
     private final GoldSequenceSampleFactory sampleFactory;
 
-    public GoldFeatureProcessFunction(
-            String invalidRecordSchemaVersion
-    ) {
+        public GoldFeatureProcessFunction(
+                String invalidRecordSchemaVersion,
+                GoldFeatureContract featureContract
+        ) {
+
         if (invalidRecordSchemaVersion == null
                 || invalidRecordSchemaVersion.isBlank()) {
 
-            throw new IllegalArgumentException(
-                    "invalidRecordSchemaVersion must not be blank"
-            );
+                throw new IllegalArgumentException(
+                        "invalidRecordSchemaVersion must not be blank"
+                );
         }
 
         this.invalidRecordSchemaVersion =
                 invalidRecordSchemaVersion.trim();
 
         this.sampleFactory =
-                new GoldSequenceSampleFactory();
-    }
+                new GoldSequenceSampleFactory(
+                        Objects.requireNonNull(
+                                featureContract,
+                                "featureContract must not be null"
+                        )
+                );
+        }
 
     @Override
     public void processElement(

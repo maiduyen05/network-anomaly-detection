@@ -1,107 +1,220 @@
 package com.network.preprocess.gold.feature;
 
+import com.network.preprocess.config.GoldFeatureContract;
 import com.network.preprocess.model.GoldModelInput;
 import com.network.preprocess.model.GoldSequenceEvent;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Chuyển đúng 32 GoldSequenceEvent thành:
+ * Chuyển GoldSequenceEvent thành tensor model-ready
+ * theo đúng GoldFeatureContract.
  *
- * <pre>
- * x_cat: long[32][4]
- * x_num: float[32][2]
- * </pre>
- *
- * <p>Class này không:</p>
+ * <p>
+ * Encoder KHÔNG hard-code:
+ * </p>
  *
  * <ul>
- *     <li>Sắp xếp lại event.</li>
- *     <li>Tạo sequence.</li>
- *     <li>Trượt theo stride.</li>
- *     <li>Tự thêm category mới.</li>
+ *     <li>sequence length;</li>
+ *     <li>số categorical feature;</li>
+ *     <li>số numeric feature;</li>
+ *     <li>categorical vocabulary;</li>
+ *     <li>numeric clip range;</li>
+ *     <li>missing numeric value.</li>
  * </ul>
- * Chỉ encode đúng 32 event đã được sắp xếp theo event time.
+ *
+ * <p>
+ * Tất cả giá trị trên lấy từ feature-contract.
+ * </p>
  */
 public final class GoldFeatureEncoder
         implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    public static final int SEQUENCE_LENGTH = 32;
-    public static final int CATEGORICAL_FEATURE_COUNT = 4;
-    public static final int NUMERIC_FEATURE_COUNT = 2;
+    private final GoldFeatureContract contract;
 
-    private final CategoricalVocabulary eventCodeVocabulary;
-    private final CategoricalVocabulary eventResultVocabulary;
-    private final CategoricalVocabulary normalizedCauseVocabulary;
-    private final CategoricalVocabulary subCauseVocabulary;
+    private final List<
+            GoldFeatureContract.CategoricalFeature
+            > categoricalFeatures;
 
-    public GoldFeatureEncoder() {
-        this.eventCodeVocabulary =
-                GoldCategoricalVocabularies.eventCode();
+    private final List<
+            GoldFeatureContract.NumericFeature
+            > numericFeatures;
 
-        this.eventResultVocabulary =
-                GoldCategoricalVocabularies.eventResultCode();
+    private final List<CategoricalVocabulary>
+            categoricalVocabularies;
 
-        this.normalizedCauseVocabulary =
-                GoldCategoricalVocabularies.normalizedCauseCode();
+    private final NumericFeatureEncoder
+            numericFeatureEncoder;
 
-        this.subCauseVocabulary =
-                GoldCategoricalVocabularies.subCauseCode();
-    }
 
     /**
-     * Encode một sequence đủ 32 event.
+     * Encoder bắt buộc phải nhận feature contract.
      *
-     * @param sequence danh sách đã được Checkpoint 11 sắp theo event time
-     * @return hai tensor đúng datatype và shape
+     * <p>
+     * Không tạo constructor không tham số vì nếu encoder
+     * tự load application.yaml thì configuration sẽ bị
+     * phân tán trở lại.
+     * </p>
+     */
+    public GoldFeatureEncoder(
+            GoldFeatureContract contract
+    ) {
+
+        this.contract =
+                Objects.requireNonNull(
+                        contract,
+                        "contract must not be null"
+                );
+
+        /*
+         * Tạo copy và sort theo index.
+         *
+         * Nhờ vậy thứ tự trong tensor luôn là:
+         *
+         * x_cat[:, feature.index]
+         *
+         * chứ không phụ thuộc vào thứ tự List từ YAML.
+         */
+        this.categoricalFeatures =
+                new ArrayList<>(
+                        contract.categoricalFeatures()
+                );
+
+        this.categoricalFeatures.sort(
+                Comparator.comparingInt(
+                        GoldFeatureContract
+                                .CategoricalFeature::index
+                )
+        );
+
+        this.numericFeatures =
+                new ArrayList<>(
+                        contract.numericFeatures()
+                );
+
+        this.numericFeatures.sort(
+                Comparator.comparingInt(
+                        GoldFeatureContract
+                                .NumericFeature::index
+                )
+        );
+
+        /*
+         * Build runtime vocabulary từ contract.
+         */
+        this.categoricalVocabularies =
+                new ArrayList<>();
+
+        for (
+                GoldFeatureContract.CategoricalFeature feature
+                        : categoricalFeatures
+        ) {
+
+            categoricalVocabularies.add(
+                    GoldCategoricalVocabularies
+                            .fromFeature(
+                                    feature
+                            )
+            );
+        }
+
+        /*
+         * Numeric encoder nhận normalization policy
+         * từ cùng một contract.
+         */
+        this.numericFeatureEncoder =
+                new NumericFeatureEncoder(
+                        contract.numericMissingValue(),
+                        contract.normalizedMin(),
+                        contract.normalizedMax()
+                );
+    }
+
+
+    /**
+     * Encode một sequence model-ready.
      */
     public GoldModelInput encode(
             List<GoldSequenceEvent> sequence
     ) {
+
         Objects.requireNonNull(
                 sequence,
                 "sequence must not be null"
         );
 
-        if (sequence.size() != SEQUENCE_LENGTH) {
+        int sequenceLength =
+                contract.sequenceLength();
+
+        int categoricalFeatureCount =
+                contract.categoricalFeatureCount();
+
+        int numericFeatureCount =
+                contract.numericFeatureCount();
+
+
+        /*
+         * Không còn hard-code 32 trong encoder.
+         *
+         * Với feature-contract v1 giá trị vẫn là 32.
+         */
+        if (sequence.size() != sequenceLength) {
+
             throw new GoldFeatureEncodingException(
                     "sequence",
                     GoldFeatureEncodingException
                             .Reason.INVALID_SEQUENCE_LENGTH,
                     String.valueOf(sequence.size()),
                     "Gold sequence must contain exactly "
-                            + SEQUENCE_LENGTH
+                            + sequenceLength
                             + " events, but received "
                             + sequence.size()
             );
         }
 
+
+        /*
+         * Shape tensor lấy trực tiếp từ contract.
+         *
+         * Contract v1:
+         *
+         * x_cat[32][4]
+         * x_num[32][2]
+         */
         long[][] xCat =
                 new long[
-                        SEQUENCE_LENGTH
+                        sequenceLength
                         ][
-                        CATEGORICAL_FEATURE_COUNT
+                        categoricalFeatureCount
                         ];
 
         float[][] xNum =
                 new float[
-                        SEQUENCE_LENGTH
+                        sequenceLength
                         ][
-                        NUMERIC_FEATURE_COUNT
+                        numericFeatureCount
                         ];
 
-        for (int timestep = 0;
-             timestep < SEQUENCE_LENGTH;
-             timestep++) {
+
+        for (
+                int timestep = 0;
+                timestep < sequenceLength;
+                timestep++
+        ) {
 
             GoldSequenceEvent event =
-                    sequence.get(timestep);
+                    sequence.get(
+                            timestep
+                    );
 
             if (event == null) {
+
                 throw new GoldFeatureEncodingException(
                         "sequence",
                         GoldFeatureEncodingException
@@ -112,60 +225,154 @@ public final class GoldFeatureEncoder
                 );
             }
 
-            /*
-             * x_cat[timestep][0] = event_code
-             */
-            xCat[timestep][0] =
-                    eventCodeVocabulary.encode(
-                            event.getEventId()
-                    );
 
             /*
-             * x_cat[timestep][1] = event_result_code
+             * =====================================================
+             * CATEGORICAL FEATURES
+             * =====================================================
              */
-            xCat[timestep][1] =
-                    eventResultVocabulary.encode(
-                            event.getEventResult()
-                    );
+
+            for (
+                    int position = 0;
+                    position < categoricalFeatures.size();
+                    position++
+            ) {
+
+                GoldFeatureContract.CategoricalFeature feature =
+                        categoricalFeatures.get(
+                                position
+                        );
+
+                CategoricalVocabulary vocabulary =
+                        categoricalVocabularies.get(
+                                position
+                        );
+
+                String rawValue =
+                        resolveCategoricalSource(
+                                event,
+                                feature.source()
+                        );
+
+                xCat[timestep][feature.index()] =
+                        vocabulary.encode(
+                                rawValue
+                        );
+            }
+
 
             /*
-             * x_cat[timestep][2] = normalized_cause_code.
-             *
-             * Chuỗi rỗng là category hợp lệ và trả về ID 0.
+             * =====================================================
+             * NUMERIC FEATURES
+             * =====================================================
              */
-            xCat[timestep][2] =
-                    normalizedCauseVocabulary.encode(
-                            event.getNormalizedCauseCode()
-                    );
 
-            /*
-             * x_cat[timestep][3] = sub_cause_code.
-             *
-             * Chuỗi rỗng cũng là category hợp lệ và trả về ID 0.
-             */
-            xCat[timestep][3] =
-                    subCauseVocabulary.encode(
-                            event.getSubCauseCode()
-                    );
+            for (
+                    GoldFeatureContract.NumericFeature feature
+                            : numericFeatures
+            ) {
 
-            /*
-             * x_num[timestep][0] = duration_ms.
-             */
-            xNum[timestep][0] =
-                    NumericFeatureEncoder.encodeDurationMs(
-                            event.getDurationMs()
-                    );
+                Number rawValue =
+                        resolveNumericSource(
+                                event,
+                                feature.source()
+                        );
 
-            /*
-             * x_num[timestep][1] = request_retries.
-             */
-            xNum[timestep][1] =
-                    NumericFeatureEncoder
-                            .encodeRequestRetries(
-                                    event.getRequestRetries()
-                            );
+                xNum[timestep][feature.index()] =
+                        numericFeatureEncoder.encode(
+                                feature,
+                                rawValue
+                        );
+            }
         }
 
-        return new GoldModelInput(xCat, xNum);
+
+        return new GoldModelInput(
+                xCat,
+                xNum
+        );
+    }
+
+
+    /**
+     * Resolve categorical source khai báo trong YAML.
+     *
+     * <p>
+     * Contract hiện tại:
+     * </p>
+     *
+     * <pre>
+     * eventId
+     * eventResult
+     * rawFields.CAUSE_CODE
+     * rawFields.SUB_CAUSE_CODE
+     * </pre>
+     *
+     * <p>
+     * GoldSequenceEvent đã project hai raw field cuối thành:
+     *
+     * normalizedCauseCode
+     * subCauseCode
+     *
+     * nên encoder sử dụng hai field đó.
+     * </p>
+     */
+    private static String resolveCategoricalSource(
+            GoldSequenceEvent event,
+            String source
+    ) {
+
+        return switch (source) {
+
+            case "eventId" ->
+                    event.getEventId();
+
+            case "eventResult" ->
+                    event.getEventResult();
+
+            case "rawFields.CAUSE_CODE" ->
+                    event.getNormalizedCauseCode();
+
+            case "rawFields.SUB_CAUSE_CODE" ->
+                    event.getSubCauseCode();
+
+            default ->
+                    throw new IllegalArgumentException(
+                            "Unsupported categorical feature source: "
+                                    + source
+                    );
+        };
+    }
+
+
+    /**
+     * Resolve numeric source khai báo trong YAML.
+     *
+     * Contract hiện tại:
+     *
+     * <pre>
+     * durationMs
+     * requestRetries
+     * </pre>
+     */
+    private static Number resolveNumericSource(
+            GoldSequenceEvent event,
+            String source
+    ) {
+
+        return switch (source) {
+
+            case "durationMs" ->
+                    event.getDurationMs();
+
+            case "requestRetries" ->
+                    event.getRequestRetries();
+
+            default ->
+                    throw new IllegalArgumentException(
+                            "Unsupported numeric feature source: "
+                                    + source
+                    );
+        };
     }
 }

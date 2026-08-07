@@ -226,8 +226,8 @@ public final class GoldJob {
                 sequenceWindows
                         .process(
                                 new GoldFeatureProcessFunction(
-                                        config
-                                                .invalidFeatureSchemaVersion()
+                                        config.invalidFeatureSchemaVersion(),
+                                        config.featureContract()
                                 )
                         )
                         .name(

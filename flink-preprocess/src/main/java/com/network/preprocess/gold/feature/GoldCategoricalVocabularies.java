@@ -1,13 +1,15 @@
 package com.network.preprocess.gold.feature;
 
+import com.network.preprocess.config.GoldFeatureContract;
+
 import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 
 /**
- * Nơi khai báo duy nhất cho toàn bộ categorical vocabulary
- * của feature contract gold-ue-sequence-feature-v1.
- *
- * <p>Không đặt mapping rải rác trong ProcessFunction,
- * mapper hoặc test vì rất dễ tạo ra ID không đồng nhất.</p>
+ * Factory chuyển categorical feature trong GoldFeatureContract
+ * thành CategoricalVocabulary dùng bởi GoldFeatureEncoder.
+ * Mapping category -> ID đến từ application.yaml:
  */
 public final class GoldCategoricalVocabularies {
 
@@ -16,86 +18,48 @@ public final class GoldCategoricalVocabularies {
     }
 
     /**
-     * x_cat[:, 0] — event_code.
-     */
-    public static CategoricalVocabulary eventCode() {
-        LinkedHashMap<String, Long> mapping =
-                new LinkedHashMap<>();
-
-        mapping.put("l_attach", 1L);
-        mapping.put("l_bearer_modify", 2L);
-        mapping.put("l_dedicated_bearer_activate", 3L);
-        mapping.put("l_dedicated_bearer_deactivate", 4L);
-        mapping.put("l_detach", 5L);
-        mapping.put("l_handover", 6L);
-        mapping.put("l_pdn_connect", 7L);
-        mapping.put("l_service_request", 8L);
-        mapping.put("l_tau", 9L);
-
-        return new CategoricalVocabulary(
-                "event_code",
-                mapping
-        );
-    }
-
-    /**
-     * x_cat[:, 1] — event_result_code.
+     * Tạo vocabulary từ một categorical feature
+     * đã được parse từ feature-contract.
      *
-     * <p>Có đúng hai category nên ID bắt đầu từ 0.</p>
+     * @param feature categorical feature trong contract
+     * @return vocabulary dùng để encode dữ liệu runtime
      */
-    public static CategoricalVocabulary eventResultCode() {
-        LinkedHashMap<String, Long> mapping =
-                new LinkedHashMap<>();
+    public static CategoricalVocabulary fromFeature(
+            GoldFeatureContract.CategoricalFeature feature
+    ) {
 
-        mapping.put("reject", 0L);
-        mapping.put("success", 1L);
-
-        return new CategoricalVocabulary(
-                "event_result_code",
-                mapping
+        Objects.requireNonNull(
+                feature,
+                "feature must not be null"
         );
-    }
 
-    /**
-     * x_cat[:, 2] — normalized_cause_code.
-     *
-     * <p>Chuỗi rỗng là category thật và có ID 0.</p>
-     */
-    public static CategoricalVocabulary normalizedCauseCode() {
-        LinkedHashMap<String, Long> mapping =
+        /*
+         * GoldFeatureContract lưu vocabulary:
+         *
+         * Map<String, Integer>
+         *
+         * trong khi CategoricalVocabulary hiện sử dụng:
+         *
+         * Map<String, Long>
+         *
+         * Vì tensor categorical cuối cùng là long[][].
+         */
+        Map<String, Long> mapping =
                 new LinkedHashMap<>();
 
-        mapping.put("", 0L);
-        mapping.put("10", 1L);
-        mapping.put("38", 2L);
-        mapping.put("9", 3L);
+        for (
+                Map.Entry<String, Integer> entry
+                        : feature.vocabulary().entrySet()
+        ) {
+
+            mapping.put(
+                    entry.getKey(),
+                    entry.getValue().longValue()
+            );
+        }
 
         return new CategoricalVocabulary(
-                "normalized_cause_code",
-                mapping
-        );
-    }
-
-    /**
-     * x_cat[:, 3] — sub_cause_code.
-     *
-     * <p>Các giá trị được sắp theo thứ tự từ điển,
-     * không phải thứ tự số.</p>
-     */
-    public static CategoricalVocabulary subCauseCode() {
-        LinkedHashMap<String, Long> mapping =
-                new LinkedHashMap<>();
-
-        mapping.put("", 0L);
-        mapping.put("107", 1L);
-        mapping.put("11", 2L);
-        mapping.put("14", 3L);
-        mapping.put("403", 4L);
-        mapping.put("410", 5L);
-        mapping.put("413", 6L);
-
-        return new CategoricalVocabulary(
-                "sub_cause_code",
+                feature.name(),
                 mapping
         );
     }

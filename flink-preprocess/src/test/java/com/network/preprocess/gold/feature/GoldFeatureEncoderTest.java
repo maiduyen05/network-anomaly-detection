@@ -78,8 +78,7 @@ class GoldFeatureEncoderTest {
             );
         }
 
-        GoldFeatureEncoder encoder =
-                new GoldFeatureEncoder();
+
 
         GoldModelInput modelInput =
                 encoder.encode(sequence);
@@ -152,7 +151,7 @@ class GoldFeatureEncoderTest {
         );
 
         GoldFeatureEncoder encoder =
-                new GoldFeatureEncoder();
+                encoder();
 
         GoldFeatureEncodingException exception =
                 assertThrows(
@@ -192,7 +191,7 @@ class GoldFeatureEncoderTest {
         sequence.get(0).setEventId("l_new_event");
 
         GoldFeatureEncoder encoder =
-                new GoldFeatureEncoder();
+                encoder();
 
         GoldFeatureEncodingException exception =
                 assertThrows(

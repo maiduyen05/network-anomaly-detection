@@ -104,11 +104,31 @@ public final class GoldSequenceEventMapper
         );
 
         /*
-         * Giữ raw fields phục vụ evidence và audit.
-         * Setter sẽ tạo mutable copy.
-         */
+        * Map này chỉ chứa những raw field mà feature contract thực sự cần.
+        * Không dùng toàn bộ 52 fields vì làm GoldSequenceEvent lớn không cần thiết, mỗi Gold sample chứa 32 event nên dữ liệu dư bị nhân 32 lần.
+        * Không copy toàn bộ 52 raw fields vào đây vì:
+        */
+        Map<String, String> featureSourceFields =
+                new LinkedHashMap<>();
+
+        featureSourceFields.put(
+                "CAUSE_CODE",
+                requireRawCategory(
+                        rawFields,
+                        "CAUSE_CODE"
+                )
+        );
+
+        featureSourceFields.put(
+                "SUB_CAUSE_CODE",
+                requireRawCategory(
+                        rawFields,
+                        "SUB_CAUSE_CODE"
+                )
+        );
+
         goldEvent.setFeatureSourceFields(
-                rawFields
+                featureSourceFields
         );
 
         /*

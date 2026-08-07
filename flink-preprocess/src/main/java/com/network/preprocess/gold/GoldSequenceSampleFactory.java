@@ -5,6 +5,7 @@ import com.network.preprocess.model.GoldEvidence;
 import com.network.preprocess.model.GoldModelInput;
 import com.network.preprocess.model.GoldSequenceSample;
 import com.network.preprocess.model.GoldSequenceWindow;
+import com.network.preprocess.config.GoldFeatureContract;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -35,10 +36,22 @@ public final class GoldSequenceSampleFactory
 
     private final GoldFeatureEncoder featureEncoder;
 
-    public GoldSequenceSampleFactory() {
+        /**
+         * Factory phải nhận cùng feature contract
+         * mà Gold Job đang sử dụng.
+         */
+        public GoldSequenceSampleFactory(
+                GoldFeatureContract featureContract
+        ) {
+
         this.featureEncoder =
-                new GoldFeatureEncoder();
-    }
+                new GoldFeatureEncoder(
+                        Objects.requireNonNull(
+                                featureContract,
+                                "featureContract must not be null"
+                        )
+                );
+        }
 
     public GoldSequenceSample create(
             GoldSequenceWindow window

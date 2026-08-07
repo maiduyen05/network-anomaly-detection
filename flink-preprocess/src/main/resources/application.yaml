@@ -222,19 +222,6 @@ gold:
   # Schema của record được route sang invalid-gold-feature.
   invalid-feature-schema-version: invalid-gold-feature-v1
 
-  # Phiên bản feature contract dùng để tạo tensor.
-  feature-version: gold-ue-sequence-feature-v1
-
-  # Mỗi sample gồm đúng 32 event liên tiếp của một UE.
-  sequence-length: 32
-
-  # Sau khi phát một sample, dịch cửa sổ 8 event.
-  #
-  # Sample 1: event 1..32
-  # Sample 2: event 9..40
-  # Sample 3: event 17..48
-  sequence-stride: 8
-
   # Gold phải tạo watermark mới vì watermark của Silver Job
   # không được lưu hoặc truyền qua Kafka.
   watermark-max-out-of-orderness-ms: 30000
@@ -245,6 +232,32 @@ gold:
 
   # State theo UE hết hạn sau một ngày không được cập nhật.
   state-ttl-ms: 86400000
+
+  # evidence phục vụ UI, audit, debug, giải thích anomaly. 
+  # Có thể thêm bớt các trường dữ liệu sau này
+  evidence:
+    fields:
+      - event_id
+      - event_result
+      - duration_ms
+      - event_time
+
+      - msisdn
+      - imsi
+      - mtmsi
+      - imeisv
+
+      - mmegi
+      - mmec
+
+      - sub_cause_code
+      - msc
+
+      - tac
+      - eci
+      - sgw
+      - sgsn
+      - pdn_pgw
 
 feature-contract:
   feature-version: gold-ue-sequence-feature-v1

@@ -1,87 +1,228 @@
 package com.network.preprocess.gold.feature;
 
+import com.network.preprocess.config.GoldFeatureContract;
+
+import java.io.Serializable;
+import java.util.Objects;
+
 /**
- * Mã hóa hai numeric feature thành FLOAT32.
+ * Encode một numeric feature theo đúng GoldFeatureContract.
  *
- * <pre>
- * x_num[32][0] = duration_ms
- * x_num[32][1] = request_retries
- * </pre>
+ * <p>
+ * Class này không hard-code:
+ * </p>
+ *
+ * <ul>
+ *     <li>missing value;</li>
+ *     <li>raw clip min;</li>
+ *     <li>raw clip max;</li>
+ *     <li>transform.</li>
+ * </ul>
+ *
+ * <p>
+ * Các giá trị trên được lấy từ application.yaml.
+ * </p>
  */
-public final class NumericFeatureEncoder {
+public final class NumericFeatureEncoder
+        implements Serializable {
 
-    public static final float MISSING_VALUE = -1.0F;
+    private static final long serialVersionUID = 1L;
 
-    public static final long DURATION_MIN_MS = 0L;
-    public static final long DURATION_MAX_MS = 600_000L;
+    private final float missingValue;
+    private final float normalizedMin;
+    private final float normalizedMax;
 
-    public static final int RETRIES_MIN = 0;
-    public static final int RETRIES_MAX = 10;
+    public NumericFeatureEncoder(
+            float missingValue,
+            float normalizedMin,
+            float normalizedMax
+    ) {
 
-    private NumericFeatureEncoder() {
-        // Utility class không cần tạo object.
+        if (normalizedMax < normalizedMin) {
+            throw new IllegalArgumentException(
+                    "normalizedMax must be >= normalizedMin"
+            );
+        }
+
+        this.missingValue = missingValue;
+        this.normalizedMin = normalizedMin;
+        this.normalizedMax = normalizedMax;
     }
 
     /**
-     * Encode duration theo log1p_minmax.
+     * Encode numeric value theo feature definition.
      *
-     * <pre>
-     * clipped = clip(duration, 0, 600000)
-     *
-     * normalized =
-     *     log(1 + clipped)
-     *     ----------------
-     *     log(1 + 600000)
-     * </pre>
+     * @param feature feature trong GoldFeatureContract
+     * @param rawValue giá trị nguồn; null nghĩa là missing
      */
-    public static float encodeDurationMs(Long rawDurationMs) {
-        if (rawDurationMs == null) {
-            return MISSING_VALUE;
+    public float encode(
+            GoldFeatureContract.NumericFeature feature,
+            Number rawValue
+    ) {
+
+        Objects.requireNonNull(
+                feature,
+                "feature must not be null"
+        );
+
+        /*
+         * Missing numeric được biểu diễn bằng đúng giá trị
+         * khai báo trong feature contract.
+         *
+         * Hiện tại:
+         *
+         * missing-value: -1.0
+         */
+        if (rawValue == null) {
+            return missingValue;
         }
 
-        long clippedDuration = Math.max(
-                DURATION_MIN_MS,
-                Math.min(rawDurationMs, DURATION_MAX_MS)
-        );
+        double raw =
+                rawValue.doubleValue();
+
+        /*
+         * Clip trước transform.
+         */
+        double clipped =
+                Math.max(
+                        feature.rawClipMin(),
+                        Math.min(
+                                raw,
+                                feature.rawClipMax()
+                        )
+                );
 
         double normalized =
-                Math.log1p(clippedDuration)
-                        / Math.log1p(DURATION_MAX_MS);
+                switch (feature.transform()) {
 
-        return clampToUnitRange((float) normalized);
+                    /*
+                     * duration_ms hiện dùng:
+                     *
+                     * log1p_minmax
+                     */
+                    case "log1p_minmax" ->
+                            encodeLog1pMinMax(
+                                    clipped,
+                                    feature.rawClipMin(),
+                                    feature.rawClipMax()
+                            );
+
+                    /*
+                     * request_retries hiện dùng:
+                     *
+                     * clipped_minmax
+                     */
+                    case "clipped_minmax" ->
+                            encodeMinMax(
+                                    clipped,
+                                    feature.rawClipMin(),
+                                    feature.rawClipMax()
+                            );
+
+                    default ->
+                            throw new IllegalArgumentException(
+                                    "Unsupported numeric transform '"
+                                            + feature.transform()
+                                            + "' for feature '"
+                                            + feature.name()
+                                            + "'"
+                            );
+                };
+
+        return clampToConfiguredRange(
+                (float) normalized
+        );
     }
 
     /**
-     * Encode requestRetries theo clipped min-max.
+     * Min-max normalization:
      *
-     * <pre>
-     * clipped = clip(requestRetries, 0, 10)
-     * normalized = clipped / 10
-     * </pre>
+     * (x - min)
+     * ----------
+     * (max - min)
      */
-    public static float encodeRequestRetries(
-            Integer rawRequestRetries
+    private static double encodeMinMax(
+            double value,
+            double min,
+            double max
     ) {
-        if (rawRequestRetries == null) {
-            return MISSING_VALUE;
+
+        if (max == min) {
+            return 0.0D;
         }
 
-        int clippedRetries = Math.max(
-                RETRIES_MIN,
-                Math.min(rawRequestRetries, RETRIES_MAX)
-        );
-
-        float normalized =
-                (float) clippedRetries
-                        / (float) RETRIES_MAX;
-
-        return clampToUnitRange(normalized);
+        return (value - min)
+                / (max - min);
     }
 
-    private static float clampToUnitRange(float value) {
+    /**
+     * Log1p + min-max.
+     *
+     * <p>
+     * Với contract hiện tại min = 0:
+     * </p>
+     *
+     * <pre>
+     * log(1 + x)
+     * ----------------
+     * log(1 + max)
+     * </pre>
+     *
+     * <p>
+     * Viết dạng tổng quát để không hard-code min = 0.
+     * </p>
+     */
+    private static double encodeLog1pMinMax(
+            double value,
+            double min,
+            double max
+    ) {
+
+        if (max == min) {
+            return 0.0D;
+        }
+
+        /*
+         * log1p chỉ hợp lệ khi input > -1.
+         */
+        if (min <= -1.0D
+                || max <= -1.0D
+                || value <= -1.0D) {
+
+            throw new IllegalArgumentException(
+                    "log1p_minmax requires values greater than -1"
+            );
+        }
+
+        double transformedValue =
+                Math.log1p(value);
+
+        double transformedMin =
+                Math.log1p(min);
+
+        double transformedMax =
+                Math.log1p(max);
+
+        return (transformedValue - transformedMin)
+                / (transformedMax - transformedMin);
+    }
+
+    /**
+     * Đưa normalized value về range output
+     * được contract khai báo.
+     *
+     * Hiện tại range là [0, 1].
+     */
+    private float clampToConfiguredRange(
+            float value
+    ) {
+
         return Math.max(
-                0.0F,
-                Math.min(value, 1.0F)
+                normalizedMin,
+                Math.min(
+                        value,
+                        normalizedMax
+                )
         );
     }
 }
