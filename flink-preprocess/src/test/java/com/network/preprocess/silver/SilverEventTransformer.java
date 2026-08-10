@@ -133,8 +133,28 @@ class SilverEventTransformerTest {
         );
     }
 
-    @Test
-    void shouldKeepSupportedEventWithUnknownResult() {
+        /**
+         * EVENT_RESULT có giá trị nhưng không nằm trong
+         * vocabulary của model phải được route sang
+         * unsupported-event.
+         *
+         * <p>
+         * Model v1 chỉ hỗ trợ:
+         * </p>
+         *
+         * <ul>
+         *     <li>reject</li>
+         *     <li>success</li>
+         * </ul>
+         *
+         * <p>
+         * Không tạo EventResult.UNKNOWN vì Gold không có
+         * vocabulary ID tương ứng để encode.
+         * </p>
+         */
+        @Test
+        void shouldRouteUnknownEventResultToUnsupported() {
+
         IdentityResolvedEvent input =
                 IdentityResolvedEventFixtures.event(
                         "l_service_request",
@@ -147,28 +167,51 @@ class SilverEventTransformerTest {
                         PROCESSING_TIME
                 );
 
-        assertTrue(result.isSupported());
-
-        assertEquals(
-                EventResult.UNKNOWN,
-                result.getSilverEvent().eventResult()
+        /*
+        * Event ID hợp lệ nhưng EVENT_RESULT không thuộc
+        * feature contract nên không được tạo SilverEvent.
+        */
+        assertFalse(
+                result.isSupported()
         );
+
+        /*
+        * EVENT_RESULT có giá trị nhưng không được model hỗ trợ.
+        */
+        assertEquals(
+                UnsupportedEventReason.UNSUPPORTED_EVENT_RESULT,
+                result.getUnsupportedEvent().reason()
+        );
+        }
+
+        /**
+         * EVENT_RESULT bị thiếu phải được phân biệt
+         * với EVENT_RESULT có giá trị nhưng không được hỗ trợ.
+         */
+        @Test
+        void shouldRouteMissingEventResultToUnsupported() {
+
+        IdentityResolvedEvent input =
+                IdentityResolvedEventFixtures.event(
+                        "l_service_request",
+                        null
+                );
+
+        SilverTransformationResult result =
+                transformer.transform(
+                        input,
+                        PROCESSING_TIME
+                );
 
         assertFalse(
-                result.getSilverEvent()
-                        .quality()
-                        .eventResultRecognized()
+                result.isSupported()
         );
 
-        assertTrue(
-                result.getSilverEvent()
-                        .quality()
-                        .warnings()
-                        .contains(
-                                "EVENT_RESULT_UNRECOGNIZED"
-                        )
+        assertEquals(
+                UnsupportedEventReason.MISSING_EVENT_RESULT,
+                result.getUnsupportedEvent().reason()
         );
-    }
+        }
 
     @Test
     void shouldRouteUnknownEventIdToUnsupported() {
