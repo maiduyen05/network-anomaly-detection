@@ -406,31 +406,42 @@ class GoldFeatureContractTest {
     }
 
 
-    /**
-     * Không được thêm category mới vào vocabulary v1.
-     *
-     * <p>
-     * Thêm category mới cũng thay đổi contract/model mapping.
-     * </p>
-     */
-    @Test
-    void shouldRejectAdditionalVocabularyCategory()
-            throws Exception {
+        /**
+         * Không được thêm category mới vào vocabulary v1.
+         *
+         * <p>
+         * Thêm category mới cũng làm thay đổi contract
+         * giữa preprocessing và trained model.
+         * </p>
+         */
+        @Test
+        void shouldRejectAdditionalVocabularyCategory()
+                throws Exception {
+
+        /*
+        * Trong validContract(), vocabulary key nằm ở
+        * indentation 10 spaces.
+        *
+        * Không dùng Java text block làm replacement
+        * nhiều dòng ở đây vì text block tự loại bỏ
+        * incidental indentation, dễ tạo YAML sai cấu trúc.
+        */
+        String vocabularyEntry =
+                "          l_tau: 9";
 
         String yaml =
                 validContract()
                         .replace(
-                                "l_tau: 9",
-                                """
-                                l_tau: 9
-                                      l_new_event: 10
-                                """
+                                vocabularyEntry,
+                                vocabularyEntry
+                                        + "\n"
+                                        + "          l_new_event: 10"
                         );
 
         assertInvalidContract(
                 yaml
         );
-    }
+        }
 
 
     /**
