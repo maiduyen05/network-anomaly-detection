@@ -59,7 +59,7 @@ public record SilverJobConfig(
         Map<String, String> msisdnToImsi,
         Map<String, String> mtmsiToImsi,
         Map<String, EventDefinition> eventDefinitionsByAlias
-) {
+) implements FlinkRuntimeConfig {
 
     /**
      * Tạo bản sao mutable của các map cấu hình.

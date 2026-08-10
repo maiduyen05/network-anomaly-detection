@@ -235,7 +235,7 @@ public record GoldJobConfig(
         long watermarkIdlenessMs,
         long stateTtlMs
 
-) {
+)  implements FlinkRuntimeConfig {
 
     /*
      * =============================================================

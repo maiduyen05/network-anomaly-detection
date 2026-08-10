@@ -6,9 +6,6 @@
 # ============================================================
 
 job:
-  # Tên xuất hiện trên Flink Web UI.
-  name: flink-preprocess-v1
-
   # Có ba Kafka partition nên đặt source parallelism bằng 3.
   parallelism: 3
 
@@ -40,6 +37,9 @@ kafka:
 # ============================================================
 
 bronze:
+  # Tên Bronze Job trên Flink Web UI.
+  job-name: flink-bronze-v1
+  
   # Topic chứa log thô do producer/NiFi gửi vào Kafka.
   input-topic: raw.ue.log.line
 

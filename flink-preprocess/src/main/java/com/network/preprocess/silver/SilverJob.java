@@ -6,6 +6,7 @@ import com.network.preprocess.model.IdentityResolvedEvent;
 import com.network.preprocess.model.InvalidIdentityRecord;
 import com.network.preprocess.model.SilverEvent;
 import com.network.preprocess.model.UnsupportedEventRecord;
+import com.network.preprocess.runtime.FlinkEnvironmentConfigurator;
 import com.network.preprocess.silver.event.MapBackedEventCatalog;
 import com.network.preprocess.silver.event.SilverEventTransformer;
 import com.network.preprocess.silver.identity
@@ -13,8 +14,8 @@ import com.network.preprocess.silver.identity
 import com.network.preprocess.silver.identity.UeIdentityResolver;
 import com.network.preprocess.sink.SilverKafkaSinks;
 import com.network.preprocess.source.BronzeEventKafkaSource;
+
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream
         .SingleOutputStreamOperator;
@@ -26,8 +27,9 @@ import java.util.Objects;
 /**
  * Entry point của Silver Flink Job.
  *
- * <p>SilverJob chịu trách nhiệm lắp ráp các component đã xây
- * ở Checkpoint 7, 8 và 9 thành một streaming pipeline hoàn chỉnh.</p>
+ * <p>
+ * Pipeline:
+ * </p>
  *
  * <pre>
  * bronze.ue.event
@@ -44,62 +46,103 @@ import java.util.Objects;
  *      ↓
  * silver.ue.event
  * </pre>
+ *
+ * <p>
+ * runtime configuration của Silver không còn được cấu hình
+ * trực tiếp trong class này.
+ * </p>
+ *
+ * <p>
+ * Parallelism và checkpoint configuration đi theo:
+ * </p>
+ *
+ * <pre>
+ * application.yaml
+ *        ↓
+ * SilverJobConfig
+ *        ↓
+ * FlinkRuntimeConfig
+ *        ↓
+ * FlinkEnvironmentConfigurator
+ * </pre>
  */
 public final class SilverJob {
 
     private SilverJob() {
     }
 
+
     /**
      * Entry point dùng khi submit Silver Job lên Flink.
      */
-    public static void main(String[] args)
-            throws Exception {
+    public static void main(
+            String[] args
+    ) throws Exception {
 
         /*
-         * BƯỚC 1: Load toàn bộ cấu hình Silver.
+         * =========================================================
+         * BƯỚC 1
+         * LOAD CONFIGURATION
+         * =========================================================
          */
+
         SilverJobConfig config =
                 SilverJobConfig.loadFromClasspath(
                         "application.yaml"
                 );
 
+
         /*
-         * BƯỚC 2: Tạo Flink execution environment.
+         * =========================================================
+         * BƯỚC 2
+         * CREATE FLINK ENVIRONMENT
+         * =========================================================
          */
+
         StreamExecutionEnvironment env =
                 StreamExecutionEnvironment
                         .getExecutionEnvironment();
 
+
         /*
-         * BƯỚC 3: Gắn toàn bộ source, operator và sink vào job graph.
+         * =========================================================
+         * BƯỚC 3
+         * BUILD PIPELINE
+         * =========================================================
          */
+
         buildPipeline(
                 env,
                 config
         );
 
+
         /*
-         * BƯỚC 4: Submit job cho Flink runtime.
-         *
-         * Trước execute(), code mới chỉ xây dựng job graph.
-         * Sau execute(), source mới bắt đầu đọc Kafka.
+         * =========================================================
+         * BƯỚC 4
+         * EXECUTE
+         * =========================================================
          */
+
         env.execute(
                 config.jobName()
         );
     }
 
+
     /**
-     * Xây dựng Silver pipeline.
+     * Xây dựng toàn bộ Silver pipeline.
      *
-     * <p>Tách method này khỏi main để unit test có thể kiểm tra
-     * job topology mà không thực sự kết nối Kafka.</p>
+     * <p>
+     * Method được tách khỏi main để topology test
+     * có thể dựng execution graph mà không execute job thật.
+     * </p>
      */
     public static void buildPipeline(
             StreamExecutionEnvironment env,
             SilverJobConfig config
     ) {
+
         Objects.requireNonNull(
                 env,
                 "env must not be null"
@@ -110,15 +153,30 @@ public final class SilverJob {
                 "config must not be null"
         );
 
-        configureEnvironment(
+
+        /*
+         * =========================================================
+         * FLINK RUNTIME CONFIGURATION
+         * =========================================================
+         *
+         * Trước Checkpoint 3, SilverJob có private method
+         * configureEnvironment() riêng.
+         *
+         * Từ Checkpoint 3, Bronze/Silver/Gold dùng chung
+         * một implementation.
+         */
+
+        FlinkEnvironmentConfigurator.configure(
                 env,
                 config
         );
 
+
         /*
-         * ============================================================
-         * BƯỚC 1: TẠO REFERENCE DATA PROVIDER
-         * ============================================================
+         * =========================================================
+         * BƯỚC 1
+         * REFERENCE DATA
+         * =========================================================
          */
 
         MapBackedUeIdentityMappingLookup identityLookup =
@@ -127,32 +185,40 @@ public final class SilverJob {
                         config.mtmsiToImsi()
                 );
 
+
         UeIdentityResolver identityResolver =
                 new UeIdentityResolver(
                         identityLookup
                 );
+
 
         MapBackedEventCatalog eventCatalog =
                 new MapBackedEventCatalog(
                         config.eventDefinitionsByAlias()
                 );
 
+
         SilverEventTransformer eventTransformer =
                 new SilverEventTransformer(
                         eventCatalog
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 2: ĐỌC BRONZE EVENT TỪ KAFKA
-         * ============================================================
+         * =========================================================
+         * BƯỚC 2
+         * BRONZE KAFKA SOURCE
+         * =========================================================
          *
-         * Bronze chưa cần watermark tại source Silver.
-         * Watermark chỉ được gắn sau khi:
-         * - identity hợp lệ;
-         * - event được hỗ trợ;
-         * - SilverEvent được tạo hoàn chỉnh.
+         * Source chưa gắn watermark ở đây.
+         *
+         * Watermark được gắn sau khi event đã:
+         *
+         * - resolve identity;
+         * - normalize;
+         * - trở thành SilverEvent hợp lệ.
          */
+
         DataStream<BronzeEvent> bronzeEvents =
                 env.fromSource(
                                 BronzeEventKafkaSource.create(
@@ -165,17 +231,14 @@ public final class SilverJob {
                                 "silver-bronze-event-source-v1"
                         );
 
+
         /*
-         * ============================================================
-         * BƯỚC 3: RESOLVE IDENTITY
-         * ============================================================
-         *
-         * Main output:
-         *     IdentityResolvedEvent
-         *
-         * Side output:
-         *     InvalidIdentityRecord
+         * =========================================================
+         * BƯỚC 3
+         * RESOLVE UE IDENTITY
+         * =========================================================
          */
+
         SingleOutputStreamOperator<IdentityResolvedEvent>
                 resolvedEvents =
                 bronzeEvents
@@ -191,6 +254,12 @@ public final class SilverJob {
                                 "silver-resolve-identity-v1"
                         );
 
+
+        /*
+         * Identity không resolve được được đưa vào
+         * side output riêng thay vì làm job fail.
+         */
+
         DataStream<InvalidIdentityRecord>
                 invalidIdentityEvents =
                 resolvedEvents.getSideOutput(
@@ -198,17 +267,14 @@ public final class SilverJob {
                                 .INVALID_IDENTITY_TAG
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 4: CHUẨN HÓA EVENT
-         * ============================================================
-         *
-         * Main output:
-         *     SilverEvent
-         *
-         * Side output:
-         *     UnsupportedEventRecord
+         * =========================================================
+         * BƯỚC 4
+         * NORMALIZE EVENT
+         * =========================================================
          */
+
         SingleOutputStreamOperator<SilverEvent>
                 normalizedEvents =
                 resolvedEvents
@@ -224,6 +290,12 @@ public final class SilverJob {
                                 "silver-normalize-event-v1"
                         );
 
+
+        /*
+         * Event không nằm trong supported event catalog
+         * được route sang side output.
+         */
+
         DataStream<UnsupportedEventRecord>
                 unsupportedEvents =
                 normalizedEvents.getSideOutput(
@@ -231,13 +303,14 @@ public final class SilverJob {
                                 .UNSUPPORTED_EVENT_TAG
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 5: DEDUP + WATERMARK + LATE ROUTING
-         * ============================================================
-         *
-         * SilverStreamBuilder được tạo tại Checkpoint 9.
+         * =========================================================
+         * BƯỚC 5
+         * DEDUPLICATE + WATERMARK + LATE ROUTING
+         * =========================================================
          */
+
         SilverStreamBuilder.Result streamResult =
                 SilverStreamBuilder.build(
                         normalizedEvents,
@@ -246,11 +319,14 @@ public final class SilverJob {
                         config.watermarkIdlenessMs()
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 6: GHI MAIN OUTPUT
-         * ============================================================
+         * =========================================================
+         * BƯỚC 6
+         * MAIN SILVER OUTPUT
+         * =========================================================
          */
+
         streamResult
                 .onTimeEvents()
                 .sinkTo(
@@ -265,11 +341,14 @@ public final class SilverJob {
                         "silver-main-kafka-sink-v1"
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 7: GHI INVALID IDENTITY SIDE OUTPUT
-         * ============================================================
+         * =========================================================
+         * BƯỚC 7
+         * INVALID IDENTITY OUTPUT
+         * =========================================================
          */
+
         invalidIdentityEvents
                 .sinkTo(
                         SilverKafkaSinks
@@ -284,11 +363,14 @@ public final class SilverJob {
                         "silver-invalid-identity-kafka-sink-v1"
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 8: GHI UNSUPPORTED EVENT SIDE OUTPUT
-         * ============================================================
+         * =========================================================
+         * BƯỚC 8
+         * UNSUPPORTED EVENT OUTPUT
+         * =========================================================
          */
+
         unsupportedEvents
                 .sinkTo(
                         SilverKafkaSinks
@@ -303,11 +385,14 @@ public final class SilverJob {
                         "silver-unsupported-event-kafka-sink-v1"
                 );
 
+
         /*
-         * ============================================================
-         * BƯỚC 9: GHI LATE EVENT SIDE OUTPUT
-         * ============================================================
+         * =========================================================
+         * BƯỚC 9
+         * LATE EVENT OUTPUT
+         * =========================================================
          */
+
         streamResult
                 .lateEvents()
                 .sinkTo(
@@ -320,54 +405,6 @@ public final class SilverJob {
                 )
                 .uid(
                         "silver-late-event-kafka-sink-v1"
-                );
-    }
-
-    /**
-     * Cấu hình runtime và checkpoint cho Silver Job.
-     */
-    private static void configureEnvironment(
-            StreamExecutionEnvironment env,
-            SilverJobConfig config
-    ) {
-        /*
-         * Với ba Kafka partition, parallelism 3 cho phép
-         * ba source subtask đọc đồng thời.
-         */
-        env.setParallelism(
-                config.parallelism()
-        );
-
-        /*
-         * EXACTLY_ONCE Kafka sink cần checkpointing.
-         */
-        env.enableCheckpointing(
-                config.checkpointIntervalMs(),
-                CheckpointingMode.EXACTLY_ONCE
-        );
-
-        /*
-         * Hủy checkpoint nếu vượt quá timeout.
-         */
-        env.getCheckpointConfig()
-                .setCheckpointTimeout(
-                        config.checkpointTimeoutMs()
-                );
-
-        /*
-         * Không chạy quá nhiều checkpoint đồng thời.
-         */
-        env.getCheckpointConfig()
-                .setMaxConcurrentCheckpoints(
-                        config.maxConcurrentCheckpoints()
-                );
-
-        /*
-         * Tạo khoảng nghỉ tối thiểu giữa hai checkpoint.
-         */
-        env.getCheckpointConfig()
-                .setMinPauseBetweenCheckpoints(
-                        config.minPauseBetweenCheckpointsMs()
                 );
     }
 }

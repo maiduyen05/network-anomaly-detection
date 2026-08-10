@@ -6,10 +6,11 @@ import com.network.preprocess.model.GoldSequenceSample;
 import com.network.preprocess.model.GoldSequenceWindow;
 import com.network.preprocess.model.InvalidGoldFeatureRecord;
 import com.network.preprocess.model.SilverEvent;
+import com.network.preprocess.runtime.FlinkEnvironmentConfigurator;
 import com.network.preprocess.sink.GoldKafkaSinks;
 import com.network.preprocess.source.SilverEventKafkaSource;
+
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream
         .SingleOutputStreamOperator;
@@ -23,7 +24,9 @@ import java.util.Objects;
 /**
  * Entry point của Gold Flink Job.
  *
- * <p>Pipeline hoàn chỉnh:</p>
+ * <p>
+ * Pipeline:
+ * </p>
  *
  * <pre>
  * silver.ue.event
@@ -34,26 +37,27 @@ import java.util.Objects;
  *      ↓
  * keyBy ueKey
  *      ↓
- * sliding sequence: length 32, stride 8
+ * sliding sequence
+ * length = 32
+ * stride = 8
  *      ↓
- * encode x_cat và x_num
+ * encode x_cat / x_num
  *      ↓
  * GoldSequenceSample
  *      ↓
  * gold.ue.sequence
  * </pre>
  *
- * <p>Hai side output:</p>
- *
- * <ul>
- *     <li>gold-too-late-event.</li>
- *     <li>invalid-gold-feature.</li>
- * </ul>
+ * <p>
+ * runtime configuration của Gold được cấu hình thông qua
+ * FlinkEnvironmentConfigurator dùng chung với Bronze và Silver.
+ * </p>
  */
 public final class GoldJob {
 
     private GoldJob() {
     }
+
 
     /**
      * Entry point khi submit Gold Job lên Flink.
@@ -63,48 +67,64 @@ public final class GoldJob {
     ) throws Exception {
 
         /*
-         * BƯỚC 1: Load cấu hình.
+         * =========================================================
+         * BƯỚC 1
+         * LOAD CONFIG
+         * =========================================================
          */
+
         GoldJobConfig config =
                 GoldJobConfig.loadFromClasspath(
                         "application.yaml"
                 );
 
+
         /*
-         * BƯỚC 2: Lấy Flink execution environment.
+         * =========================================================
+         * BƯỚC 2
+         * CREATE FLINK ENVIRONMENT
+         * =========================================================
          */
+
         StreamExecutionEnvironment env =
                 StreamExecutionEnvironment
                         .getExecutionEnvironment();
 
+
         /*
-         * BƯỚC 3: Xây dựng job graph.
+         * =========================================================
+         * BƯỚC 3
+         * BUILD PIPELINE
+         * =========================================================
          */
+
         buildPipeline(
                 env,
                 config
         );
 
+
         /*
-         * BƯỚC 4: Submit job.
-         *
-         * Trước execute(), chưa có dữ liệu Kafka nào được đọc.
+         * =========================================================
+         * BƯỚC 4
+         * EXECUTE
+         * =========================================================
          */
+
         env.execute(
                 config.jobName()
         );
     }
 
+
     /**
-     * Lắp ráp toàn bộ Gold pipeline.
-     *
-     * <p>Method được tách khỏi main để topology test có thể
-     * xây job graph mà không kết nối Kafka.</p>
+     * Xây dựng toàn bộ Gold pipeline.
      */
     public static void buildPipeline(
             StreamExecutionEnvironment env,
             GoldJobConfig config
     ) {
+
         Objects.requireNonNull(
                 env,
                 "env must not be null"
@@ -115,19 +135,35 @@ public final class GoldJob {
                 "config must not be null"
         );
 
-        configureEnvironment(
+
+        /*
+         * =========================================================
+         * FLINK RUNTIME CONFIGURATION
+         * =========================================================
+         *
+         * Không cấu hình checkpoint trực tiếp tại GoldJob nữa.
+         *
+         * Bronze, Silver và Gold đều dùng cùng một configurator.
+         */
+
+        FlinkEnvironmentConfigurator.configure(
                 env,
                 config
         );
 
+
         /*
          * =========================================================
-         * BƯỚC 1: ĐỌC SILVER EVENT VÀ GẮN WATERMARK
+         * BƯỚC 1
+         * SILVER SOURCE + WATERMARK
          * =========================================================
          *
-         * Kafka không lưu watermark của Silver Job.
-         * Vì vậy Gold phải đọc event_time và tạo watermark mới.
+         * Kafka không lưu watermark của upstream Flink Job.
+         *
+         * Gold phải tạo watermark mới từ eventTime
+         * của SilverEvent.
          */
+
         DataStream<SilverEvent> silverEvents =
                 env.fromSource(
                                 SilverEventKafkaSource.create(
@@ -142,26 +178,32 @@ public final class GoldJob {
                                 "gold-silver-event-source-v1"
                         );
 
+
         /*
          * =========================================================
-         * BƯỚC 2: CHUYỂN SILVER EVENT THÀNH GOLD SEQUENCE EVENT
+         * BƯỚC 2
+         * SILVER EVENT -> GOLD SEQUENCE EVENT
          * =========================================================
          *
-         * Mapper giữ:
-         * - identity;
-         * - category dạng chuỗi;
-         * - numeric source;
-         * - event time;
-         * - evidence;
-         * - sourceOrderKey.
+         * Mapper giữ các source feature dạng raw:
          *
-         * Mapper chưa encode vocabulary ID.
+         * eventId
+         * eventResult
+         * cause code
+         * sub cause code
+         * duration
+         * request retries
+         *
+         * Đồng thời giữ evidence/display fields cấu hình ở YAML.
          */
+
         SingleOutputStreamOperator<GoldSequenceEvent>
                 goldSequenceEvents =
                 silverEvents
                         .map(
-                                new GoldSequenceEventMapper(config.evidenceFields())
+                                new GoldSequenceEventMapper(
+                                        config.evidenceFields()
+                                )
                         )
                         .name(
                                 "gold-map-sequence-event"
@@ -170,14 +212,24 @@ public final class GoldJob {
                                 "gold-map-sequence-event-v1"
                         );
 
+
         /*
          * =========================================================
-         * BƯỚC 3: GOM EVENT THEO UE VÀ TẠO SLIDING WINDOW
+         * BƯỚC 3
+         * BUILD SLIDING SEQUENCE
          * =========================================================
          *
-         * keyBy là bắt buộc vì GoldSequenceProcessFunction
-         * giữ state riêng cho từng ueKey.
+         * State được partition theo ueKey.
+         *
+         * Model v1:
+         *
+         * length = 32
+         * stride = 8
+         *
+         * Các giá trị này đi từ GoldFeatureContract,
+         * không hard-code ở đây.
          */
+
         SingleOutputStreamOperator<GoldSequenceWindow>
                 sequenceWindows =
                 goldSequenceEvents
@@ -200,27 +252,45 @@ public final class GoldJob {
                                 "gold-build-sequence-window-v1"
                         );
 
+
         /*
-         * Event có eventTime nhỏ hơn hoặc bằng watermark hiện tại
-         * không được chèn ngược vào window đã phát.
+         * =========================================================
+         * TOO-LATE EVENT SIDE OUTPUT
+         * =========================================================
+         *
+         * Event đến sau watermark không được chèn ngược
+         * vào sequence/window đã emit.
          */
+
         DataStream<GoldSequenceEvent> tooLateEvents =
                 sequenceWindows.getSideOutput(
                         GoldSequenceProcessFunction
                                 .TOO_LATE_EVENT_TAG
                 );
 
+
         /*
          * =========================================================
-         * BƯỚC 4: ENCODE WINDOW THÀNH SAMPLE MODEL-READY
+         * BƯỚC 4
+         * FEATURE ENCODING
          * =========================================================
          *
-         * Main output:
-         *     GoldSequenceSample
+         * Input:
          *
-         * Side output:
-         *     InvalidGoldFeatureRecord
+         * GoldSequenceWindow
+         *
+         * Output:
+         *
+         * GoldSequenceSample
+         *
+         * model_input:
+         *
+         * x_cat[32][4]
+         * x_num[32][2]
+         *
+         * Encoder nhận GoldFeatureContract từ configuration.
          */
+
         SingleOutputStreamOperator<GoldSequenceSample>
                 modelReadySamples =
                 sequenceWindows
@@ -237,6 +307,12 @@ public final class GoldJob {
                                 "gold-encode-model-feature-v1"
                         );
 
+
+        /*
+         * Window không encode được theo feature contract
+         * được đưa sang side output riêng.
+         */
+
         DataStream<InvalidGoldFeatureRecord>
                 invalidFeatureRecords =
                 modelReadySamples.getSideOutput(
@@ -244,11 +320,14 @@ public final class GoldJob {
                                 .INVALID_FEATURE_TAG
                 );
 
+
         /*
          * =========================================================
-         * BƯỚC 5: GHI MAIN OUTPUT
+         * BƯỚC 5
+         * MAIN GOLD OUTPUT
          * =========================================================
          */
+
         modelReadySamples
                 .sinkTo(
                         GoldKafkaSinks.sequenceSink(
@@ -262,11 +341,14 @@ public final class GoldJob {
                         "gold-main-kafka-sink-v1"
                 );
 
+
         /*
          * =========================================================
-         * BƯỚC 6: GHI TOO-LATE SIDE OUTPUT
+         * BƯỚC 6
+         * TOO-LATE OUTPUT
          * =========================================================
          */
+
         tooLateEvents
                 .sinkTo(
                         GoldKafkaSinks.tooLateEventSink(
@@ -280,11 +362,14 @@ public final class GoldJob {
                         "gold-too-late-kafka-sink-v1"
                 );
 
+
         /*
          * =========================================================
-         * BƯỚC 7: GHI INVALID-FEATURE SIDE OUTPUT
+         * BƯỚC 7
+         * INVALID FEATURE OUTPUT
          * =========================================================
          */
+
         invalidFeatureRecords
                 .sinkTo(
                         GoldKafkaSinks.invalidFeatureSink(
@@ -299,23 +384,31 @@ public final class GoldJob {
                 );
     }
 
+
     /**
      * Tạo watermark strategy cho SilverEvent.
      *
-     * <p>Ví dụ với max out-of-orderness 30 giây:</p>
+     * <p>
+     * Ví dụ:
+     * </p>
      *
      * <pre>
-     * Event time lớn nhất đã thấy: 10:01:00
-     * Watermark xấp xỉ:           10:00:30
+     * max event time = 10:01:00
+     * out-of-order   = 30 seconds
+     *
+     * watermark ≈ 10:00:30
      * </pre>
      *
-     * <p>Event có thời gian nhỏ hơn hoặc bằng watermark có thể
-     * bị xem là quá trễ.</p>
+     * <p>
+     * Đây là event-time configuration riêng của Gold,
+     * không thuộc FlinkRuntimeConfig chung.
+     * </p>
      */
     private static WatermarkStrategy<SilverEvent>
     createWatermarkStrategy(
             GoldJobConfig config
     ) {
+
         return WatermarkStrategy
                 .<SilverEvent>forBoundedOutOfOrderness(
                         Duration.ofMillis(
@@ -325,10 +418,7 @@ public final class GoldJob {
                 )
 
                 /*
-                 * eventTime trong SilverEvent là ISO-8601 UTC String.
-                 *
-                 * Ví dụ:
-                 * 2026-07-08T10:00:00Z
+                 * Silver eventTime là ISO-8601 UTC.
                  */
                 .withTimestampAssigner(
                         (event, previousTimestamp) ->
@@ -338,61 +428,13 @@ public final class GoldJob {
                 )
 
                 /*
-                 * Một partition không có dữ liệu không được giữ
-                 * watermark của toàn bộ source.
+                 * Partition im lặng không được giữ watermark
+                 * của toàn bộ source.
                  */
                 .withIdleness(
                         Duration.ofMillis(
                                 config.watermarkIdlenessMs()
                         )
-                );
-    }
-
-    /**
-     * Cấu hình runtime và checkpoint cho Gold Job.
-     */
-    private static void configureEnvironment(
-            StreamExecutionEnvironment env,
-            GoldJobConfig config
-    ) {
-        /*
-         * Hiện Kafka topic có ba partition nên parallelism bằng 3.
-         */
-        env.setParallelism(
-                config.parallelism()
-        );
-
-        /*
-         * Kafka sink EXACTLY_ONCE chỉ commit transaction
-         * khi Flink checkpoint hoàn thành.
-         */
-        env.enableCheckpointing(
-                config.checkpointIntervalMs(),
-                CheckpointingMode.EXACTLY_ONCE
-        );
-
-        /*
-         * Hủy checkpoint nếu thời gian chạy vượt quá timeout.
-         */
-        env.getCheckpointConfig()
-                .setCheckpointTimeout(
-                        config.checkpointTimeoutMs()
-                );
-
-        /*
-         * Giới hạn số checkpoint chạy đồng thời.
-         */
-        env.getCheckpointConfig()
-                .setMaxConcurrentCheckpoints(
-                        config.maxConcurrentCheckpoints()
-                );
-
-        /*
-         * Tạo khoảng nghỉ giữa hai checkpoint liên tiếp.
-         */
-        env.getCheckpointConfig()
-                .setMinPauseBetweenCheckpoints(
-                        config.minPauseBetweenCheckpointsMs()
                 );
     }
 }
