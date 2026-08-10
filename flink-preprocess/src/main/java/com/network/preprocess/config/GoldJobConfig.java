@@ -637,13 +637,6 @@ public record GoldJobConfig(
                                 "gold.evidence.fields"
                         ),
 
-                        /*
-                        * Event time + state.
-                        */
-                        requiredNonNegativeLong(
-                                root,
-                                "gold.watermark-max-out-of-orderness-ms"
-                        ),
 
 
                             /*

@@ -23,23 +23,67 @@ import java.util.Objects;
  */
 public record GoldFeatureContract(
 
+        /*
+         * =========================================================
+         * FEATURE VERSION
+         * =========================================================
+         */
+
         String featureVersion,
 
+
+        /*
+         * =========================================================
+         * SEQUENCE CONTRACT
+         * =========================================================
+         */
+
         int sequenceLength,
+
         int sequenceStride,
+
+        String paddingSide,
+
         boolean emitPartialWindows,
 
+
+        /*
+         * =========================================================
+         * CATEGORICAL CONTRACT
+         * =========================================================
+         */
+
         String categoricalDtype,
+
         int categoricalFeatureCount,
+
+        boolean categoricalTrim,
+
+        boolean categoricalLowercase,
+
+        String categoricalOrdering,
+
         String unknownPolicy,
+
         String missingPolicy,
 
         List<CategoricalFeature> categoricalFeatures,
 
+
+        /*
+         * =========================================================
+         * NUMERIC CONTRACT
+         * =========================================================
+         */
+
         String numericDtype,
+
         int numericFeatureCount,
+
         float numericMissingValue,
+
         float normalizedMin,
+
         float normalizedMax,
 
         List<NumericFeature> numericFeatures
@@ -187,6 +231,18 @@ public record GoldFeatureContract(
             );
         }
 
+        paddingSide =
+                requiredText(
+                        paddingSide,
+                        "paddingSide"
+                );
+
+        categoricalOrdering =
+                requiredText(
+                        categoricalOrdering,
+                        "categoricalOrdering"
+                );
+
         categoricalDtype =
                 requiredText(
                         categoricalDtype,
@@ -333,6 +389,12 @@ public record GoldFeatureContract(
                         "categorical"
                 );
 
+        JsonNode categoricalNormalization =
+                requiredNode(
+                        categorical,
+                        "normalization"
+                );
+
         JsonNode numeric =
                 requiredNode(
                         contract,
@@ -366,10 +428,23 @@ public record GoldFeatureContract(
         GoldFeatureContract result =
                 new GoldFeatureContract(
 
+                        /*
+                        * =================================================
+                        * FEATURE VERSION
+                        * =================================================
+                        */
+
                         requiredText(
                                 contract,
                                 "feature-version"
                         ),
+
+
+                        /*
+                        * =================================================
+                        * SEQUENCE
+                        * =================================================
+                        */
 
                         requiredPositiveInt(
                                 sequence,
@@ -381,10 +456,22 @@ public record GoldFeatureContract(
                                 "stride"
                         ),
 
+                        requiredText(
+                                sequence,
+                                "padding-side"
+                        ),
+
                         requiredBoolean(
                                 sequence,
                                 "emit-partial-windows"
                         ),
+
+
+                        /*
+                        * =================================================
+                        * CATEGORICAL
+                        * =================================================
+                        */
 
                         requiredText(
                                 categorical,
@@ -396,6 +483,29 @@ public record GoldFeatureContract(
                                 "feature-count"
                         ),
 
+
+                        /*
+                        * Categorical normalization.
+                        */
+                        requiredBoolean(
+                                categoricalNormalization,
+                                "trim"
+                        ),
+
+                        requiredBoolean(
+                                categoricalNormalization,
+                                "lowercase"
+                        ),
+
+                        requiredText(
+                                categorical,
+                                "ordering"
+                        ),
+
+
+                        /*
+                        * Missing / unknown policy.
+                        */
                         requiredText(
                                 categorical,
                                 "unknown-policy"
@@ -407,6 +517,13 @@ public record GoldFeatureContract(
                         ),
 
                         categoricalFeatures,
+
+
+                        /*
+                        * =================================================
+                        * NUMERIC
+                        * =================================================
+                        */
 
                         requiredText(
                                 numeric,
@@ -614,52 +731,508 @@ public record GoldFeatureContract(
         return result;
     }
 
-    /**
-     * Guard cho model hiện tại.
-     *
-     * README/model hiện tại yêu cầu:
-     *
-     * x_cat[32][4]
-     * x_num[32][2]
-     */
-    private static void validateCurrentModelCompatibility(
-            GoldFeatureContract contract
-    ) {
+        /**
+         * Validate feature contract với model đang được deploy.
+         *
+         * <p>
+         * Đây là compatibility guard giữa:
+         * </p>
+         *
+         * <pre>
+         * application.yaml
+         *        ↕
+         * Gold preprocessing
+         *        ↕
+         * trained model
+         * </pre>
+         *
+         * <p>
+         * Với feature-version:
+         * </p>
+         *
+         * <pre>
+         * gold-ue-sequence-feature-v1
+         * </pre>
+         *
+         * mọi thành phần ảnh hưởng đến tensor phải giữ nguyên.
+         *
+         * Nếu muốn thay đổi một trong các giá trị này thì phải:
+         *
+         * <ol>
+         *     <li>Tạo feature-version mới.</li>
+         *     <li>Train lại model tương ứng.</li>
+         *     <li>Deploy preprocessing + model mới cùng nhau.</li>
+         * </ol>
+         */
+        private static void validateCurrentModelCompatibility(
+                GoldFeatureContract contract
+        ) {
 
-        if (contract.sequenceLength() != 32) {
-            throw new IllegalStateException(
-                    "Current model requires sequence length 32"
-            );
+        Objects.requireNonNull(
+                contract,
+                "contract must not be null"
+        );
+
+        /*
+        * =============================================================
+        * FEATURE VERSION
+        * =============================================================
+        */
+
+        requireExact(
+                "gold-ue-sequence-feature-v1",
+                contract.featureVersion(),
+                "feature-version"
+        );
+
+
+        /*
+        * =============================================================
+        * SEQUENCE
+        * =============================================================
+        *
+        * Length ảnh hưởng trực tiếp tensor shape.
+        *
+        * Stride ảnh hưởng cách sinh sample:
+        *
+        * 1..32
+        * 9..40
+        * 17..48
+        *
+        * Vì model/dataset v1 được định nghĩa với stride 8,
+        * không cho phép thay đổi trong cùng feature-version.
+        */
+
+        requireExact(
+                32,
+                contract.sequenceLength(),
+                "sequence.length"
+        );
+
+        requireExact(
+                8,
+                contract.sequenceStride(),
+                "sequence.stride"
+        );
+
+        requireExact(
+                "LEFT",
+                contract.paddingSide(),
+                "sequence.padding-side"
+        );
+
+        if (contract.emitPartialWindows()) {
+
+                throw incompatible(
+                        "sequence.emit-partial-windows",
+                        false,
+                        true
+                );
         }
 
-        if (contract.categoricalFeatureCount() != 4) {
-            throw new IllegalStateException(
-                    "Current model requires 4 categorical features"
-            );
+
+        /*
+        * =============================================================
+        * CATEGORICAL GLOBAL CONTRACT
+        * =============================================================
+        */
+
+        requireExact(
+                "INT64",
+                contract.categoricalDtype(),
+                "categorical.dtype"
+        );
+
+        requireExact(
+                4,
+                contract.categoricalFeatureCount(),
+                "categorical.feature-count"
+        );
+
+        /*
+        * Runtime CategoricalVocabulary hiện luôn:
+        *
+        * trim()
+        * lowercase(Locale.ROOT)
+        *
+        * Vì vậy YAML phải mô tả đúng behavior đó.
+        */
+        if (!contract.categoricalTrim()) {
+
+                throw incompatible(
+                        "categorical.normalization.trim",
+                        true,
+                        false
+                );
         }
 
-        if (contract.numericFeatureCount() != 2) {
-            throw new IllegalStateException(
-                    "Current model requires 2 numeric features"
-            );
+        if (!contract.categoricalLowercase()) {
+
+                throw incompatible(
+                        "categorical.normalization.lowercase",
+                        true,
+                        false
+                );
         }
 
-        if (!"INT64".equals(
-                contract.categoricalDtype()
+        requireExact(
+                "LEXICOGRAPHIC_ASCENDING",
+                contract.categoricalOrdering(),
+                "categorical.ordering"
+        );
+
+        /*
+        * Runtime hiện reject missing/unknown categorical.
+        */
+        requireExact(
+                "REJECT",
+                contract.unknownPolicy(),
+                "categorical.unknown-policy"
+        );
+
+        requireExact(
+                "REJECT",
+                contract.missingPolicy(),
+                "categorical.missing-policy"
+        );
+
+
+        /*
+        * =============================================================
+        * CATEGORICAL FEATURE 0
+        * EVENT_ID
+        * =============================================================
+        */
+
+        requireCategoricalFeature(
+                contract,
+                0,
+                "event_code",
+                "eventId",
+                "fixed_vocabulary_lookup",
+                Map.ofEntries(
+                        Map.entry("l_attach", 1),
+                        Map.entry("l_bearer_modify", 2),
+                        Map.entry(
+                                "l_dedicated_bearer_activate",
+                                3
+                        ),
+                        Map.entry(
+                                "l_dedicated_bearer_deactivate",
+                                4
+                        ),
+                        Map.entry("l_detach", 5),
+                        Map.entry("l_handover", 6),
+                        Map.entry("l_pdn_connect", 7),
+                        Map.entry("l_service_request", 8),
+                        Map.entry("l_tau", 9)
+                )
+        );
+
+
+        /*
+        * =============================================================
+        * CATEGORICAL FEATURE 1
+        * EVENT_RESULT
+        * =============================================================
+        */
+
+        requireCategoricalFeature(
+                contract,
+                1,
+                "event_result_code",
+                "eventResult",
+                "fixed_vocabulary_lookup",
+                Map.of(
+                        "reject", 0,
+                        "success", 1
+                )
+        );
+
+
+        /*
+        * =============================================================
+        * CATEGORICAL FEATURE 2
+        * CAUSE_CODE
+        * =============================================================
+        *
+        * Empty string là category thật của model v1.
+        */
+
+        Map<String, Integer> expectedCauseVocabulary =
+                new LinkedHashMap<>();
+
+        expectedCauseVocabulary.put("", 0);
+        expectedCauseVocabulary.put("10", 1);
+        expectedCauseVocabulary.put("38", 2);
+        expectedCauseVocabulary.put("9", 3);
+
+        requireCategoricalFeature(
+                contract,
+                2,
+                "normalized_cause_code",
+                "rawFields.CAUSE_CODE",
+                "fixed_vocabulary_lookup",
+                expectedCauseVocabulary
+        );
+
+
+        /*
+        * =============================================================
+        * CATEGORICAL FEATURE 3
+        * SUB_CAUSE_CODE
+        * =============================================================
+        */
+
+        Map<String, Integer> expectedSubCauseVocabulary =
+                new LinkedHashMap<>();
+
+        expectedSubCauseVocabulary.put("", 0);
+        expectedSubCauseVocabulary.put("107", 1);
+        expectedSubCauseVocabulary.put("11", 2);
+        expectedSubCauseVocabulary.put("14", 3);
+        expectedSubCauseVocabulary.put("403", 4);
+        expectedSubCauseVocabulary.put("410", 5);
+        expectedSubCauseVocabulary.put("413", 6);
+
+        requireCategoricalFeature(
+                contract,
+                3,
+                "sub_cause_code",
+                "rawFields.SUB_CAUSE_CODE",
+                "fixed_vocabulary_lookup",
+                expectedSubCauseVocabulary
+        );
+
+
+        /*
+        * =============================================================
+        * NUMERIC GLOBAL CONTRACT
+        * =============================================================
+        */
+
+        requireExact(
+                "FLOAT32",
+                contract.numericDtype(),
+                "numeric.dtype"
+        );
+
+        requireExact(
+                2,
+                contract.numericFeatureCount(),
+                "numeric.feature-count"
+        );
+
+        requireFloatExact(
+                -1.0F,
+                contract.numericMissingValue(),
+                "numeric.missing-value"
+        );
+
+        /*
+        * NumericFeatureEncoder hiện normalize về [0, 1].
+        *
+        * Không cho YAML đổi range nhưng vẫn dùng model v1.
+        */
+        requireFloatExact(
+                0.0F,
+                contract.normalizedMin(),
+                "numeric.normalized-valid-range.min"
+        );
+
+        requireFloatExact(
+                1.0F,
+                contract.normalizedMax(),
+                "numeric.normalized-valid-range.max"
+        );
+
+
+        /*
+        * =============================================================
+        * NUMERIC FEATURE 0
+        * DURATION_MS
+        * =============================================================
+        */
+
+        requireNumericFeature(
+                contract,
+                0,
+                "duration_ms",
+                "durationMs",
+                0.0D,
+                600_000.0D,
+                "log1p_minmax"
+        );
+
+
+        /*
+        * =============================================================
+        * NUMERIC FEATURE 1
+        * REQUEST_RETRIES
+        * =============================================================
+        */
+
+        requireNumericFeature(
+                contract,
+                1,
+                "request_retries",
+                "requestRetries",
+                0.0D,
+                10.0D,
+                "clipped_minmax"
+        );
+        }
+
+        /**
+         * Validate chính xác một categorical feature.
+         */
+        private static void requireCategoricalFeature(
+                GoldFeatureContract contract,
+                int index,
+                String expectedName,
+                String expectedSource,
+                String expectedTransform,
+                Map<String, Integer> expectedVocabulary
+        ) {
+
+        CategoricalFeature feature =
+                contract
+                        .categoricalFeatures()
+                        .stream()
+                        .filter(
+                                candidate ->
+                                        candidate.index() == index
+                        )
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Missing categorical feature "
+                                                        + "at index "
+                                                        + index
+                                        )
+                        );
+
+        requireExact(
+                expectedName,
+                feature.name(),
+                "categorical.features["
+                        + index
+                        + "].name"
+        );
+
+        requireExact(
+                expectedSource,
+                feature.source(),
+                "categorical.features["
+                        + index
+                        + "].source"
+        );
+
+        requireExact(
+                expectedTransform,
+                feature.transform(),
+                "categorical.features["
+                        + index
+                        + "].transform"
+        );
+
+        /*
+        * Map.equals() kiểm tra:
+        *
+        * - cùng key;
+        * - cùng value;
+        *
+        * nhưng không phụ thuộc insertion order.
+        *
+        * Đây là điều ta cần vì vocabulary ID mới là
+        * phần ảnh hưởng trực tiếp model.
+        */
+        if (!expectedVocabulary.equals(
+                feature.vocabulary()
         )) {
-            throw new IllegalStateException(
-                    "Current model requires categorical dtype INT64"
-            );
+
+                throw incompatible(
+                        "categorical.features["
+                                + index
+                                + "].vocabulary",
+                        expectedVocabulary,
+                        feature.vocabulary()
+                );
+        }
         }
 
-        if (!"FLOAT32".equals(
-                contract.numericDtype()
-        )) {
-            throw new IllegalStateException(
-                    "Current model requires numeric dtype FLOAT32"
-            );
+        /**
+         * Validate chính xác một numeric feature.
+         */
+        private static void requireNumericFeature(
+                GoldFeatureContract contract,
+                int index,
+                String expectedName,
+                String expectedSource,
+                double expectedRawClipMin,
+                double expectedRawClipMax,
+                String expectedTransform
+        ) {
+
+        NumericFeature feature =
+                contract
+                        .numericFeatures()
+                        .stream()
+                        .filter(
+                                candidate ->
+                                        candidate.index() == index
+                        )
+                        .findFirst()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Missing numeric feature "
+                                                        + "at index "
+                                                        + index
+                                        )
+                        );
+
+        requireExact(
+                expectedName,
+                feature.name(),
+                "numeric.features["
+                        + index
+                        + "].name"
+        );
+
+        requireExact(
+                expectedSource,
+                feature.source(),
+                "numeric.features["
+                        + index
+                        + "].source"
+        );
+
+        requireDoubleExact(
+                expectedRawClipMin,
+                feature.rawClipMin(),
+                "numeric.features["
+                        + index
+                        + "].raw-clip-min"
+        );
+
+        requireDoubleExact(
+                expectedRawClipMax,
+                feature.rawClipMax(),
+                "numeric.features["
+                        + index
+                        + "].raw-clip-max"
+        );
+
+        requireExact(
+                expectedTransform,
+                feature.transform(),
+                "numeric.features["
+                        + index
+                        + "].transform"
+        );
         }
-    }
 
     private static void validateIndexes(
             List<Integer> indexes,
@@ -761,6 +1334,119 @@ public record GoldFeatureContract(
 
         return value;
     }
+
+        /**
+         * Validate String chính xác.
+         */
+        private static void requireExact(
+                String expected,
+                String actual,
+                String path
+        ) {
+
+        if (!Objects.equals(
+                expected,
+                actual
+        )) {
+
+                throw incompatible(
+                        path,
+                        expected,
+                        actual
+                );
+        }
+        }
+
+
+        /**
+         * Validate int chính xác.
+         */
+        private static void requireExact(
+                int expected,
+                int actual,
+                String path
+        ) {
+
+        if (expected != actual) {
+
+                throw incompatible(
+                        path,
+                        expected,
+                        actual
+                );
+        }
+        }
+
+
+        /**
+         * Float trong contract là các constant cấu hình
+         * như -1, 0, 1 nên Float.compare phù hợp.
+         */
+        private static void requireFloatExact(
+                float expected,
+                float actual,
+                String path
+        ) {
+
+        if (Float.compare(
+                expected,
+                actual
+        ) != 0) {
+
+                throw incompatible(
+                        path,
+                        expected,
+                        actual
+                );
+        }
+        }
+
+
+        /**
+         * Numeric clip range hiện dùng các giá trị nguyên
+         * được parse thành double nên Double.compare phù hợp.
+         */
+        private static void requireDoubleExact(
+                double expected,
+                double actual,
+                String path
+        ) {
+
+        if (Double.compare(
+                expected,
+                actual
+        ) != 0) {
+
+                throw incompatible(
+                        path,
+                        expected,
+                        actual
+                );
+        }
+        }
+
+
+        /**
+         * Tạo thông báo lỗi thống nhất khi YAML không còn
+         * tương thích với model v1.
+         */
+        private static IllegalStateException incompatible(
+                String path,
+                Object expected,
+                Object actual
+        ) {
+
+        return new IllegalStateException(
+                "Feature contract is incompatible with "
+                        + "gold-ue-sequence-feature-v1: "
+                        + path
+                        + " expected <"
+                        + expected
+                        + "> but was <"
+                        + actual
+                        + ">"
+        );
+        }
 
     private static int requiredNonNegativeInt(
             JsonNode parent,
