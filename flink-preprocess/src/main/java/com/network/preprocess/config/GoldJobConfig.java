@@ -9,6 +9,8 @@ import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Cấu hình runtime dành riêng cho Gold Job.
@@ -199,43 +201,38 @@ public record GoldJobConfig(
          * =========================================================
          */
 
-        /**
-         * Source of truth duy nhất cho model input.
-         *
-         * Bao gồm:
-         *
-         * - feature version;
-         * - sequence length;
-         * - stride;
-         * - categorical features;
-         * - categorical vocabularies;
-         * - numeric features;
-         * - clip range;
-         * - normalization;
-         * - missing policy.
-         */
         GoldFeatureContract featureContract,
 
-
         /*
-         * =========================================================
-         * EVENT TIME + STATE
-         * =========================================================
-         */
+        * =========================================================
+        * CONFIGURABLE EVIDENCE
+        * =========================================================
+        */
 
         /**
-         * Event được phép đến trễ tối đa bao nhiêu millisecond.
+         * Danh sách metadata được phép đưa vào evidence/display
+         * của từng Gold event.
+         *
+         * <p>
+         * Danh sách lấy từ:
+         * </p>
+         *
+         * <pre>
+         * gold:
+         *   evidence:
+         *     fields:
+         *       - event_id
+         *       - event_time
+         *       - imsi
+         *       ...
+         * </pre>
+         *
+         * Việc thêm/bớt field ở đây không thay đổi x_cat/x_num.
          */
+        List<String> evidenceFields,
+
         long watermarkMaxOutOfOrdernessMs,
-
-        /**
-         * Partition im lặng bao lâu thì được xem là idle.
-         */
         long watermarkIdlenessMs,
-
-        /**
-         * TTL của state theo UE.
-         */
         long stateTtlMs
 
 ) {
@@ -259,13 +256,34 @@ public record GoldJobConfig(
      * bắt buộc để Gold tạo dữ liệu model-ready.
      * </p>
      */
-    public GoldJobConfig {
+        public GoldJobConfig {
 
         Objects.requireNonNull(
                 featureContract,
                 "featureContract must not be null"
         );
-    }
+
+        Objects.requireNonNull(
+                evidenceFields,
+                "evidenceFields must not be null"
+        );
+
+        /*
+        * Tạo mutable copy.
+        *
+        * Không giữ trực tiếp List của Jackson/YAML.
+        */
+        evidenceFields =
+                new ArrayList<>(
+                        evidenceFields
+                );
+
+        if (evidenceFields.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "evidenceFields must not be empty"
+                );
+        }
+        }
 
 
     /*
@@ -609,6 +627,24 @@ public record GoldJobConfig(
                              */
                             featureContract,
 
+                            /*
+                        * Các field evidence tùy chọn.
+                        *
+                        * Không ảnh hưởng model input.
+                        */
+                        requiredTextList(
+                                root,
+                                "gold.evidence.fields"
+                        ),
+
+                        /*
+                        * Event time + state.
+                        */
+                        requiredNonNegativeLong(
+                                root,
+                                "gold.watermark-max-out-of-orderness-ms"
+                        ),
+
 
                             /*
                              * -------------------------------------
@@ -895,4 +931,84 @@ public record GoldJobConfig(
 
         return node.longValue();
     }
+
+        /**
+         * Đọc một danh sách String bắt buộc từ YAML.
+         *
+         * <p>
+         * Ví dụ:
+         * </p>
+         *
+         * <pre>
+         * gold:
+         *   evidence:
+         *     fields:
+         *       - event_id
+         *       - event_time
+         *       - imsi
+         * </pre>
+         */
+        private static List<String> requiredTextList(
+                JsonNode root,
+                String path
+        ) {
+
+        JsonNode node =
+                requiredNode(
+                        root,
+                        path
+                );
+
+        if (!node.isArray()) {
+                throw new IllegalStateException(
+                        "Configuration must be an array: "
+                                + path
+                );
+        }
+
+        List<String> result =
+                new ArrayList<>();
+
+        for (JsonNode item : node) {
+
+                if (!item.isTextual()
+                        || item.asText().isBlank()) {
+
+                throw new IllegalStateException(
+                        "Every item in "
+                                + path
+                                + " must be non-blank text"
+                );
+                }
+
+                String value =
+                        item
+                                .asText()
+                                .trim();
+
+                /*
+                * Không cho khai báo cùng một evidence field hai lần.
+                */
+                if (result.contains(value)) {
+                throw new IllegalStateException(
+                        "Duplicated evidence field: "
+                                + value
+                );
+                }
+
+                result.add(
+                        value
+                );
+        }
+
+        if (result.isEmpty()) {
+                throw new IllegalStateException(
+                        "Configuration list must not be empty: "
+                                + path
+                );
+        }
+
+        return result;
+        }
 }
+

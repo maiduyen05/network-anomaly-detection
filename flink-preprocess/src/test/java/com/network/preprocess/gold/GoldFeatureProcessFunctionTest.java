@@ -1,5 +1,7 @@
 package com.network.preprocess.gold;
 
+import com.network.preprocess.config.GoldFeatureContract;
+import com.network.preprocess.config.GoldJobConfig;
 import com.network.preprocess.gold.feature
         .GoldFeatureEncodingException;
 import com.network.preprocess.model.GoldSequenceEvent;
@@ -21,8 +23,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Kiểm thử GoldFeatureProcessFunction.
+ *
+ * <p>
+ * ProcessFunction có hai nhiệm vụ:
+ * </p>
+ *
+ * <ul>
+ *     <li>
+ *         Window hợp lệ -> GoldSequenceSample ở main output.
+ *     </li>
+ *     <li>
+ *         Window vi phạm feature contract ->
+ *         InvalidGoldFeatureRecord ở side output.
+ *     </li>
+ * </ul>
+ */
 class GoldFeatureProcessFunctionTest {
 
     private OneInputStreamOperatorTestHarness<
@@ -30,13 +53,19 @@ class GoldFeatureProcessFunctionTest {
             GoldSequenceSample
             > harness;
 
+
     @AfterEach
     void tearDown() throws Exception {
+
         if (harness != null) {
             harness.close();
         }
     }
 
+
+    /**
+     * Window hợp lệ phải tạo GoldSequenceSample.
+     */
     @Test
     void shouldEmitModelReadySampleToMainOutput()
             throws Exception {
@@ -44,9 +73,7 @@ class GoldFeatureProcessFunctionTest {
         harness =
                 ProcessFunctionTestHarnesses
                         .forProcessFunction(
-                                new GoldFeatureProcessFunction(
-                                        "invalid-gold-feature-v1"
-                                )
+                                createProcessFunction()
                         );
 
         GoldSequenceWindow window =
@@ -70,6 +97,13 @@ class GoldFeatureProcessFunctionTest {
         GoldSequenceSample sample =
                 output.get(0);
 
+
+        /*
+         * =========================================================
+         * SAMPLE METADATA
+         * =========================================================
+         */
+
         assertEquals(
                 "sample-001",
                 sample.getSampleId()
@@ -85,58 +119,80 @@ class GoldFeatureProcessFunctionTest {
                 sample.getFeatureVersion()
         );
 
+
         /*
-         * Kiểm tra đúng shape của hai tensor.
+         * =========================================================
+         * MODEL SHAPE
+         * =========================================================
          */
+
         assertEquals(
                 32,
-                sample.getModelInput()
+                sample
+                        .getModelInput()
                         .getXCat()
                         .length
         );
 
         assertEquals(
                 4,
-                sample.getModelInput()
+                sample
+                        .getModelInput()
                         .getXCat()[0]
                         .length
         );
 
         assertEquals(
                 32,
-                sample.getModelInput()
+                sample
+                        .getModelInput()
                         .getXNum()
                         .length
         );
 
         assertEquals(
                 2,
-                sample.getModelInput()
+                sample
+                        .getModelInput()
                         .getXNum()[0]
                         .length
         );
 
+
         /*
-         * l_attach=1, success=1, cause ""=0, sub-cause ""=0.
+         * l_attach = 1
+         * success  = 1
+         * cause "" = 0
+         * sub ""   = 0
          */
         assertArrayEquals(
-                new long[]{1L, 1L, 0L, 0L},
-                sample.getModelInput()
+                new long[]{
+                        1L,
+                        1L,
+                        0L,
+                        0L
+                },
+                sample
+                        .getModelInput()
                         .getXCat()[0]
         );
 
+
         /*
-         * Evidence phải giữ đủ 32 event.
+         * Evidence vẫn giữ đúng 32 event
+         * đã tạo nên model input.
          */
         assertEquals(
                 32,
-                sample.getEvidence()
+                sample
+                        .getEvidence()
                         .getEvents()
                         .size()
         );
 
+
         /*
-         * Window hợp lệ không được tạo side output lỗi.
+         * Window hợp lệ không tạo invalid-feature.
          */
         ConcurrentLinkedQueue<
                 StreamRecord<InvalidGoldFeatureRecord>
@@ -146,9 +202,16 @@ class GoldFeatureProcessFunctionTest {
                                 .INVALID_FEATURE_TAG
                 );
 
-        assertNull(sideOutput);
+        assertNull(
+                sideOutput
+        );
     }
 
+
+    /**
+     * Category không tồn tại trong contract
+     * phải được route sang invalid-feature side output.
+     */
     @Test
     void shouldRouteUnknownCategoryToSideOutput()
             throws Exception {
@@ -156,13 +219,12 @@ class GoldFeatureProcessFunctionTest {
         harness =
                 ProcessFunctionTestHarnesses
                         .forProcessFunction(
-                                new GoldFeatureProcessFunction(
-                                        "invalid-gold-feature-v1"
-                                )
+                                createProcessFunction()
                         );
 
         /*
-         * Đặt processing time cố định để failedAt deterministic.
+         * Đặt processing time cố định
+         * để failedAt deterministic.
          */
         harness.setProcessingTime(
                 1_722_672_001_000L
@@ -178,13 +240,20 @@ class GoldFeatureProcessFunctionTest {
                 100L
         );
 
+
         /*
-         * Window lỗi không được đi vào main output.
+         * Invalid window không được đi vào main output.
          */
         assertTrue(
-                harness.extractOutputValues().isEmpty()
+                harness
+                        .extractOutputValues()
+                        .isEmpty()
         );
 
+
+        /*
+         * Phải có đúng một invalid record.
+         */
         ConcurrentLinkedQueue<
                 StreamRecord<InvalidGoldFeatureRecord>
                 > sideOutput =
@@ -193,16 +262,21 @@ class GoldFeatureProcessFunctionTest {
                                 .INVALID_FEATURE_TAG
                 );
 
-        assertNotNull(sideOutput);
+        assertNotNull(
+                sideOutput
+        );
+
         assertEquals(
                 1,
                 sideOutput.size()
         );
 
+
         InvalidGoldFeatureRecord invalidRecord =
                 sideOutput
                         .peek()
                         .getValue();
+
 
         assertEquals(
                 "sample-001",
@@ -216,7 +290,8 @@ class GoldFeatureProcessFunctionTest {
 
         assertEquals(
                 GoldFeatureEncodingException
-                        .Reason.UNKNOWN_CATEGORY,
+                        .Reason
+                        .UNKNOWN_CATEGORY,
                 invalidRecord.getReason()
         );
 
@@ -235,6 +310,39 @@ class GoldFeatureProcessFunctionTest {
         );
     }
 
+
+    /**
+     * Tạo ProcessFunction bằng chính feature contract
+     * đang được application.yaml sử dụng.
+     *
+     * <p>
+     * Constructor production hiện tại là:
+     * </p>
+     *
+     * <pre>
+     * GoldFeatureProcessFunction(
+     *     invalidSchemaVersion,
+     *     featureContract
+     * )
+     * </pre>
+     */
+    private static GoldFeatureProcessFunction
+    createProcessFunction() {
+
+        GoldFeatureContract contract =
+                GoldJobConfig
+                        .loadFromClasspath(
+                                "application.yaml"
+                        )
+                        .featureContract();
+
+        return new GoldFeatureProcessFunction(
+                "invalid-gold-feature-v1",
+                contract
+        );
+    }
+
+
     /**
      * Tạo window đúng 32 event.
      *
@@ -243,6 +351,7 @@ class GoldFeatureProcessFunctionTest {
     private static GoldSequenceWindow createWindow(
             String firstEventId
     ) {
+
         Instant startTime =
                 Instant.parse(
                         "2026-07-08T10:00:00Z"
@@ -251,9 +360,11 @@ class GoldFeatureProcessFunctionTest {
         List<GoldSequenceEvent> events =
                 new ArrayList<>();
 
-        for (int index = 0;
-             index < 32;
-             index++) {
+        for (
+                int index = 0;
+                index < 32;
+                index++
+        ) {
 
             String eventId =
                     index == 0
@@ -263,6 +374,13 @@ class GoldFeatureProcessFunctionTest {
             GoldSequenceEvent event =
                     new GoldSequenceEvent();
 
+
+            /*
+             * =====================================================
+             * IDENTITY
+             * =====================================================
+             */
+
             event.setUeKey(
                     "452040000000001"
             );
@@ -270,6 +388,13 @@ class GoldFeatureProcessFunctionTest {
             event.setImsi(
                     "452040000000001"
             );
+
+
+            /*
+             * =====================================================
+             * CATEGORICAL SOURCES
+             * =====================================================
+             */
 
             event.setEventId(
                     eventId
@@ -280,10 +405,22 @@ class GoldFeatureProcessFunctionTest {
             );
 
             /*
-             * Chuỗi rỗng là category hợp lệ, ID 0.
+             * Empty string là category hợp lệ.
              */
-            event.setNormalizedCauseCode("");
-            event.setSubCauseCode("");
+            event.setNormalizedCauseCode(
+                    ""
+            );
+
+            event.setSubCauseCode(
+                    ""
+            );
+
+
+            /*
+             * =====================================================
+             * NUMERIC SOURCES
+             * =====================================================
+             */
 
             event.setDurationMs(
                     100L
@@ -293,11 +430,27 @@ class GoldFeatureProcessFunctionTest {
                     0
             );
 
+
+            /*
+             * =====================================================
+             * EVENT TIME
+             * =====================================================
+             */
+
             event.setEventTimeEpochMs(
                     startTime
-                            .plusSeconds(index)
+                            .plusSeconds(
+                                    index
+                            )
                             .toEpochMilli()
             );
+
+
+            /*
+             * =====================================================
+             * EVIDENCE / FEATURE SOURCE MAPS
+             * =====================================================
+             */
 
             event.setFeatureSourceFields(
                     new LinkedHashMap<>()
@@ -311,6 +464,10 @@ class GoldFeatureProcessFunctionTest {
                     new LinkedHashMap<>()
             );
 
+
+            /*
+             * Deterministic tie-breaker.
+             */
             event.setSourceOrderKey(
                     "raw-record-" + index
             );
@@ -327,7 +484,9 @@ class GoldFeatureProcessFunctionTest {
                 "452040000000001",
                 "452040000000001",
                 startTime,
-                startTime.plusSeconds(31),
+                startTime.plusSeconds(
+                        31
+                ),
                 32,
                 8,
                 events

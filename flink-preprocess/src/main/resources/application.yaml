@@ -24,128 +24,117 @@ job:
   # Chờ tối thiểu 30 giây giữa hai checkpoint hoàn thành.
   min-pause-between-checkpoints-ms: 30000
 
+
 kafka:
   # Địa chỉ Kafka broker mà Flink sẽ kết nối tới.
-  # kafka:29092 thường là địa chỉ Kafka bên trong Docker network.
+  # kafka:29092 là địa chỉ Kafka bên trong Docker network.
   bootstrap-servers: kafka:29092
 
   # Khi consumer group chưa có committed offset,
-  # Flink sẽ đọc từ message cũ nhất còn được Kafka lưu.
+  # Flink đọc từ message cũ nhất Kafka còn lưu.
   starting-offsets: earliest
 
 
+# ============================================================
+# BRONZE
+# ============================================================
+
 bronze:
-  # Topic chứa log thô do log-producer gửi vào Kafka.
+  # Topic chứa log thô do producer/NiFi gửi vào Kafka.
   input-topic: raw.ue.log.line
 
-  # Topic chứa dữ liệu đã được Bronze job kiểm tra và chuẩn hóa cơ bản.
+  # Topic chứa BronzeEvent.
   output-topic: bronze.ue.event
 
-  # Topic chứa các message lỗi không thể xử lý ở Bronze layer.
-  # DLQ là viết tắt của Dead Letter Queue.
+  # Dead Letter Queue của Bronze.
   dlq-topic: dlq.ue.log.line
 
-  # Consumer group của Bronze Flink job.
-  # Kafka dùng giá trị này để lưu offset đã đọc của job.
+  # Kafka consumer group riêng của Bronze.
   consumer-group-id: flink-bronze-v1
 
-  # Hai prefix phải khác nhau.
-  # Không chạy hai Bronze job cùng lúc với cùng prefix.
+  # EXACTLY_ONCE transactional prefixes.
   output-transactional-id-prefix: flink-bronze-output-v1-
   dlq-transactional-id-prefix: flink-bronze-dlq-v1-
 
-  # Phiên bản schema của JSON envelope nhận từ raw input topic.
-  # Dùng để kiểm tra message đầu vào có đúng cấu trúc mong đợi không.
+  # Schema của envelope đầu vào.
   envelope-schema-version: raw-envelope-v1
 
-  # Phiên bản schema của dữ liệu Bronze được ghi ra output topic.
+  # Schema của BronzeEvent.
   output-schema-version: bronze-v1
 
   raw-log:
-    # Ký tự dùng để phân tách các trường trong một dòng raw log.
+    # Raw log sử dụng dấu ";" làm delimiter.
     delimiter: ";"
 
-    # Số lượng trường bắt buộc phải có sau khi tách raw log.
-    # Nếu số field khác 52, message có thể bị xem là không hợp lệ.
+    # Raw log hiện tại phải có đúng 52 field.
     field-count: 52
 
   timestamp:
-    # Múi giờ dùng để chuyển timestamp dạng local time
-    # thành thời gian chuẩn khi xử lý dữ liệu.
+    # Timestamp trong raw log được hiểu theo timezone Việt Nam.
     local-timezone: Asia/Ho_Chi_Minh
 
 
+# ============================================================
+# SILVER
+# ============================================================
+
 silver:
-  # Tên hiển thị của Silver Job trên Flink Web UI.
+  # Tên Silver Job trên Flink UI.
   job-name: flink-silver-v1
 
-  # Topic đầu vào của Silver job.
-  # Dữ liệu được lấy từ output của Bronze job.
+  # Input từ Bronze.
   input-topic: bronze.ue.event
 
-  # Topic chứa dữ liệu Silver đã được làm sạch,
-  # chuẩn hóa identity và bổ sung thông tin cần thiết.
+  # Output Silver.
   output-topic: silver.ue.event
 
-  # Topic chứa các event không xác định được identity hợp lệ,
-  # ví dụ thiếu hoặc sai IMSI, MSISDN, IMEI hoặc khóa định danh.
+  # Side outputs.
   invalid-identity-topic: invalid-identity
-
-  # Topic chứa các loại event mà Silver job chưa hỗ trợ xử lý.
   unsupported-event-topic: unsupported-event
-
-  # Topic chứa các event đến quá trễ so với watermark cho phép.
   late-event-topic: late-ue-event
 
-  # Consumer group của Silver Flink job.
-  # Group này phải khác consumer group của Bronze và Gold.
+  # Consumer group riêng của Silver.
   consumer-group-id: flink-silver-v1
 
-  # Mỗi Kafka sink EXACTLY_ONCE phải có transactional ID prefix riêng.
+  # Mỗi EXACTLY_ONCE sink phải có transactional prefix riêng.
   output-transactional-id-prefix: flink-silver-output-v1-
   invalid-identity-transactional-id-prefix: flink-silver-invalid-identity-v1-
   unsupported-event-transactional-id-prefix: flink-silver-unsupported-event-v1-
   late-event-transactional-id-prefix: flink-silver-late-event-v1-
 
-  # Phiên bản schema của dữ liệu Silver được ghi ra Kafka.
+  # Schema output Silver.
   output-schema-version: silver-v1
 
-  # Cho phép event đến trễ tối đa 30.000 ms, tức 30 giây.
-  # Flink dùng giá trị này để tạo watermark cho event time.
+  # Cho phép out-of-order tối đa 30 giây.
   watermark-max-out-of-orderness-ms: 30000
 
-  # Nếu một Kafka partition không có dữ liệu trong 60 giây,
-  # tạm coi partition đó là idle để nó không chặn watermark chung.
+  # Partition im lặng 60 giây được đánh dấu idle.
   watermark-idleness-ms: 60000
 
-  # Thời gian tồn tại tối đa của dữ liệu trong Flink state.
-  # 86.400.000 ms tương đương 24 giờ.
-  # State không được sử dụng quá thời gian này có thể bị xóa.
+  # State TTL 24 giờ.
   state-ttl-ms: 86400000
 
-    # IDENTITY REFERENCE DATA DÙNG CHO LOCAL DEVELOPMENT
   # ==========================================================
+  # IDENTITY REFERENCE DATA CHO LOCAL DEVELOPMENT
+  # ==========================================================
+
+  # Nếu event đã có IMSI thì Silver dùng IMSI trực tiếp.
   #
-  # Nếu BronzeEvent có IMSI hợp lệ, Silver dùng IMSI trực tiếp
-  # và không cần tra hai map dưới.
+  # Nếu không có IMSI:
   #
-  # Event không có IMSI mới fallback lần lượt:
-  # MSISDN → IMSI
-  # MTMSI  → IMSI
+  # MSISDN -> IMSI
+  # MTMSI  -> IMSI
   identity-mappings:
     msisdn-to-imsi: {}
     mtmsi-to-imsi: {}
 
+
   # ==========================================================
   # EVENT CATALOG ĐƯỢC MODEL HỖ TRỢ
   # ==========================================================
-  #
-  # Chỉ EVENT_ID nằm trong danh sách này mới được đưa vào
-  # silver.ue.event. Event khác đi vào unsupported-event.
-  #
-  # Không tự động coi mọi EVENT_ID raw là hợp lệ vì Gold và model
-  # cần một vocabulary ổn định.
+
   supported-events:
+
     - alias: l_attach
       canonical-event-id: l_attach
       display-name: LTE Attach
@@ -183,75 +172,155 @@ silver:
       display-name: LTE Tracking Area Update
 
 
+# ============================================================
+# GOLD
+# ============================================================
+
 gold:
-  # Tên Gold Job hiển thị trên Flink Web UI.
+  # Tên Gold Job trên Flink UI.
   job-name: flink-gold-v1
 
-  # Gold đọc các event đã được chuẩn hóa từ tầng Silver.
+  # Gold đọc SilverEvent.
   input-topic: silver.ue.event
 
-  # Main output chứa sample model-ready:
-  # - tensor x_cat[32][4];
-  # - tensor x_num[32][2];
-  # - metadata window;
-  # - evidence của 32 event nguồn.
+  # Output model-ready.
+  #
+  # Bao gồm:
+  #
+  # x_cat[32][4]
+  # x_num[32][2]
+  # metadata window
+  # evidence
   output-topic: gold.ue.sequence
 
-  # Event đến sau watermark được ghi vào topic này.
+  # Event đến quá trễ.
   too-late-event-topic: gold-too-late-event
 
-  # Window vi phạm feature contract được ghi vào topic này.
+  # Window không encode được theo feature contract.
   invalid-feature-topic: invalid-gold-feature
 
   # Consumer group riêng của Gold.
   consumer-group-id: flink-gold-v1
 
-  # Mỗi Kafka sink EXACTLY_ONCE phải có một prefix riêng.
-  #
-  # Không dùng chung prefix giữa:
-  # - main output;
-  # - too-late output;
-  # - invalid-feature output.
+
+  # ==========================================================
+  # EXACTLY-ONCE TRANSACTION PREFIX
+  # ==========================================================
+
   output-transactional-id-prefix: flink-gold-output-v1-
+
   too-late-event-transactional-id-prefix: flink-gold-too-late-v1-
+
   invalid-feature-transactional-id-prefix: flink-gold-invalid-feature-v1-
 
-  # Schema của sample Gold hợp lệ.
+
+  # ==========================================================
+  # OUTPUT SCHEMA
+  # ==========================================================
+
+  # GoldSequenceSample schema.
   output-schema-version: gold-sequence-v1
 
-  # Schema của record được route sang invalid-gold-feature.
+  # InvalidGoldFeatureRecord schema.
   invalid-feature-schema-version: invalid-gold-feature-v1
 
-  # Gold phải tạo watermark mới vì watermark của Silver Job
-  # không được lưu hoặc truyền qua Kafka.
+
+  # ==========================================================
+  # EVENT TIME
+  # ==========================================================
+
+  # Gold phải tạo watermark mới vì Kafka
+  # không lưu watermark của upstream Flink Job.
   watermark-max-out-of-orderness-ms: 30000
 
-  # Nếu một Kafka partition im lặng 60 giây,
-  # không để partition đó giữ watermark chung.
+  # Partition không có dữ liệu 60 giây
+  # được coi là idle.
   watermark-idleness-ms: 60000
 
-  # State theo UE hết hạn sau một ngày không được cập nhật.
+
+  # ==========================================================
+  # STATE
+  # ==========================================================
+
+  # State theo UE hết hạn sau 24 giờ
+  # không được cập nhật.
   state-ttl-ms: 86400000
 
-  # evidence phục vụ UI, audit, debug, giải thích anomaly. 
-  # Có thể thêm bớt các trường dữ liệu sau này
+
+  # ==========================================================
+  # CONFIGURABLE EVIDENCE
+  # ==========================================================
+  #
+  # Các field ở đây phục vụ:
+  #
+  # - UI;
+  # - audit;
+  # - debug;
+  # - điều tra anomaly;
+  # - giải thích model.
+  #
+  # Có thể thêm hoặc bỏ field mà KHÔNG thay đổi:
+  #
+  # - sequence length;
+  # - vocabulary;
+  # - x_cat;
+  # - x_num;
+  # - model contract.
+  #
+  # Ví dụ muốn thêm APN:
+  #
+  #   - apn
+  #
+  # GoldEvidenceFieldProjector sẽ fallback sang:
+  #
+  # rawFields["APN"]
+  #
   evidence:
     fields:
+
+      # ------------------------------------------------------
+      # Event
+      # ------------------------------------------------------
+
       - event_id
+      - event_name
+
       - event_result
+      - event_result_label
+
       - duration_ms
       - event_time
+
+
+      # ------------------------------------------------------
+      # UE identity
+      # ------------------------------------------------------
 
       - msisdn
       - imsi
       - mtmsi
       - imeisv
 
+
+      # ------------------------------------------------------
+      # Network identity
+      # ------------------------------------------------------
+
       - mmegi
       - mmec
 
+
+      # ------------------------------------------------------
+      # Cause / signaling
+      # ------------------------------------------------------
+
       - sub_cause_code
       - msc
+
+
+      # ------------------------------------------------------
+      # Location / serving network
+      # ------------------------------------------------------
 
       - tac
       - eci
@@ -259,21 +328,55 @@ gold:
       - sgsn
       - pdn_pgw
 
+
+# ============================================================
+# GOLD MODEL FEATURE CONTRACT
+# ============================================================
+#
+# Đây là source of truth duy nhất cho model input.
+#
+# Không được thay vocabulary/range/shape mà vẫn giữ
+# feature-version hiện tại.
+#
+# Nếu thay đổi feature contract thì phải:
+#
+# 1. tạo feature-version mới;
+# 2. train lại model tương ứng;
+# 3. deploy model mới.
+# ============================================================
+
 feature-contract:
   feature-version: gold-ue-sequence-feature-v1
+
+
+  # ==========================================================
+  # SEQUENCE
+  # ==========================================================
 
   sequence:
     length: 32
     stride: 8
+
+    # Hiện chưa dùng padding vì chỉ emit khi đủ 32 event.
     padding-side: LEFT
 
-    # Chỉ phát sample khi đã đủ 32 event.
-    # Do đó tensor thực tế không chứa timestep padding.
+    # Chỉ phát sample khi đủ 32 event.
     emit-partial-windows: false
+
+
+  # ==========================================================
+  # CATEGORICAL FEATURES
+  # ==========================================================
 
   categorical:
     dtype: INT64
+
     feature-count: 4
+
+
+    # --------------------------------------------------------
+    # Normalization
+    # --------------------------------------------------------
 
     normalization:
       trim: true
@@ -281,16 +384,34 @@ feature-contract:
 
     ordering: LEXICOGRAPHIC_ASCENDING
 
-    # Không dùng padding-id, unknown-id hoặc missing-id vì các ID
-    # 0, 1, 2... đang được category thật sử dụng.
+
+    # --------------------------------------------------------
+    # Unknown / missing policy
+    # --------------------------------------------------------
+
+    # Không tự thêm category mới khi Flink đang chạy.
     unknown-policy: REJECT
+
+    # Missing categorical feature bị reject.
     missing-policy: REJECT
 
+
+    # --------------------------------------------------------
+    # Feature definitions
+    # --------------------------------------------------------
+
     features:
+
+      # ======================================================
+      # x_cat[:, 0]
+      # EVENT_ID
+      # ======================================================
+
       - index: 0
         name: event_code
         source: eventId
         transform: fixed_vocabulary_lookup
+
         vocabulary:
           l_attach: 1
           l_bearer_modify: 2
@@ -302,32 +423,51 @@ feature-contract:
           l_service_request: 8
           l_tau: 9
 
+
+      # ======================================================
+      # x_cat[:, 1]
+      # EVENT_RESULT
+      # ======================================================
+
       - index: 1
         name: event_result_code
         source: eventResult
         transform: fixed_vocabulary_lookup
+
         vocabulary:
           reject: 0
           success: 1
+
+
+      # ======================================================
+      # x_cat[:, 2]
+      # CAUSE_CODE
+      # ======================================================
 
       - index: 2
         name: normalized_cause_code
         source: rawFields.CAUSE_CODE
         transform: fixed_vocabulary_lookup
 
-        # Chuỗi rỗng là category hợp lệ, không phải missing.
+        # Empty string là category hợp lệ.
         vocabulary:
           "": 0
           "10": 1
           "38": 2
           "9": 3
 
+
+      # ======================================================
+      # x_cat[:, 3]
+      # SUB_CAUSE_CODE
+      # ======================================================
+
       - index: 3
         name: sub_cause_code
         source: rawFields.SUB_CAUSE_CODE
         transform: fixed_vocabulary_lookup
 
-        # Chuỗi rỗng là category hợp lệ, không phải missing.
+        # Empty string là category hợp lệ.
         vocabulary:
           "": 0
           "107": 1
@@ -337,26 +477,60 @@ feature-contract:
           "410": 5
           "413": 6
 
+
+  # ==========================================================
+  # NUMERIC FEATURES
+  # ==========================================================
+
   numeric:
     dtype: FLOAT32
+
     feature-count: 2
 
+    # Numeric source = null.
     missing-value: -1.0
+
+
+    # --------------------------------------------------------
+    # Normalized output range
+    # --------------------------------------------------------
+
     normalized-valid-range:
       min: 0.0
       max: 1.0
 
+
+    # --------------------------------------------------------
+    # Numeric feature definitions
+    # --------------------------------------------------------
+
     features:
+
+      # ======================================================
+      # x_num[:, 0]
+      # DURATION
+      # ======================================================
+
       - index: 0
         name: duration_ms
         source: durationMs
+
         raw-clip-min: 0
         raw-clip-max: 600000
+
         transform: log1p_minmax
+
+
+      # ======================================================
+      # x_num[:, 1]
+      # REQUEST_RETRIES
+      # ======================================================
 
       - index: 1
         name: request_retries
         source: requestRetries
+
         raw-clip-min: 0
         raw-clip-max: 10
+
         transform: clipped_minmax

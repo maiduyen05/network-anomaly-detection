@@ -161,7 +161,7 @@ public final class GoldJob {
                 goldSequenceEvents =
                 silverEvents
                         .map(
-                                new GoldSequenceEventMapper()
+                                new GoldSequenceEventMapper(config.evidenceFields())
                         )
                         .name(
                                 "gold-map-sequence-event"
