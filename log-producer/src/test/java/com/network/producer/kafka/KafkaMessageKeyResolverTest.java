@@ -3,11 +3,6 @@ package com.network.producer.kafka;
 import com.network.producer.model.RawNetworkEvent;
 import org.junit.jupiter.api.Test;
 
-unzip -p \
-  flink-preprocess/target/flink-preprocess-1.0.0-SNAPSHOT.jar \
-  META-INF/MANIFEST.MF \
-  | grep Main-Class
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;

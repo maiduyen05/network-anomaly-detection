@@ -8,7 +8,9 @@ import com.network.producer.kafka.KafkaRawEventPublisher;
 import com.network.producer.model.RawNetworkEvent;
 import com.network.producer.reader.FileLogReader;
 import com.network.producer.serialization.RawNetworkEventJsonSerializer;
+
 import org.apache.kafka.clients.producer.KafkaProducer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,124 +22,216 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
- * Kết nối toàn bộ các file log-producer
- * Thư mục ban đầu --> Lấy danh sách file
- * --> FileLogReader(đọc từng dòng)
- * --> RawNetworkEventFactory (chuyển về định dạng JSON)
- * --> KafkaRawEventPublisher (khởi tạo publisher đẩy DL vào kafka)
- * --> Kafka
+ * Entry point của log-producer.
+ *
+ * <p>
+ * Pipeline:
+ * </p>
+ *
+ * <pre>
+ * input directory
+ *       ↓
+ * FileLogReader
+ *       ↓
+ * RawNetworkEventFactory (chuyển về định dạng JSON)
+ *       ↓
+ * RawNetworkEventJsonSerializer
+ *       ↓
+ * KafkaRawEventPublisher  (khởi tạo publisher đẩy DL vào Kafka)
+ *       ↓
+ * raw.ue.log.line
+ * </pre>
+ *
+ * <p>
+ * Producer chỉ chịu trách nhiệm ingest raw log.
+ * Nó không parse 52 field nghiệp vụ.
+ * Việc parse/validate/transform thuộc Bronze Flink Job.
+ * </p>
  */
 public final class LogProducerApplication {
 
     /**
-     * Logger dùng thay cho System.out.println().
+     * Logger của application.
      */
     private static final Logger LOGGER =
             LoggerFactory.getLogger(
                     LogProducerApplication.class
             );
 
-    /**
-     * Đường dẫn cấu hình mặc định khi không truyền tham số thứ hai.
-     */
-    private static final Path DEFAULT_CONFIG_PATH =
-            Path.of(
-                    "log-producer",
-                    "src",
-                    "main",
-                    "resources",
-                    "application.properties"
-            );
 
     /**
-     * Constructor private vì application được chạy qua main().
+     * Utility/application class không cần instance.
      */
     private LogProducerApplication() {
     }
 
+
     /**
-     * Chạy ứng dụng.
+     * Entry point.
      *
-     * <p>Cú pháp:</p>
+     * <p>
+     * Có hai cách chạy:
+     * </p>
      *
      * <pre>
-     * LogProducerApplication input-directory [config-file]
+     * 1 argument:
+     *
+     * LogProducerApplication input-directory
+     *
+     * -> dùng application.properties trong classpath.
+     *
+     *
+     * 2 arguments:
+     *
+     * LogProducerApplication input-directory config-file
+     *
+     * -> dùng configuration file bên ngoài.
      * </pre>
      */
-    public static void main(String[] args) {
+    public static void main(
+            String[] args
+    ) {
 
-        if (args.length < 1 || args.length > 2) {
+        /*
+         * =========================================================
+         * VALIDATE COMMAND LINE
+         * =========================================================
+         */
+
+        if (args.length < 1
+                || args.length > 2) {
+
             System.err.println(
                     "Usage: LogProducerApplication "
                             + "<input-directory> [config-file]"
             );
 
-            System.exit(1);
+            System.exit(
+                    1
+            );
         }
 
-        Path inputDirectory =
-                Path.of(args[0]);
 
-        Path configPath =
-                args.length == 2
-                        ? Path.of(args[1])
-                        : DEFAULT_CONFIG_PATH;
+        /*
+         * =========================================================
+         * INPUT DIRECTORY
+         * =========================================================
+         */
+
+        Path inputDirectory =
+                Path.of(
+                        args[0]
+                );
+
 
         try {
+
+            /*
+             * =====================================================
+             * LOAD CONFIGURATION
+             * =====================================================
+             *
+             * 1 argument:
+             *
+             *     classpath application.properties
+             *
+             * 2 arguments:
+             *
+             *     external properties file
+             */
+
+            ProducerConfiguration configuration =
+                    args.length == 2
+                            ? ProducerConfiguration.load(
+                                    Path.of(
+                                            args[1]
+                                    )
+                            )
+                            : ProducerConfiguration.loadDefault();
+
+
+            /*
+             * =====================================================
+             * EXECUTE PRODUCER PIPELINE
+             * =====================================================
+             */
+
             run(
                     inputDirectory,
-                    configPath
+                    configuration
             );
 
         } catch (Exception exception) {
+
             LOGGER.error(
                     "Producer execution failed",
                     exception
             );
 
-            System.exit(1);
+            System.exit(
+                    1
+            );
         }
     }
 
+
     /**
-     * Thực thi pipeline file → Kafka.
+     * Thực thi pipeline:
+     *
+     * <pre>
+     * files
+     *   ↓
+     * raw envelope
+     *   ↓
+     * Kafka
+     * </pre>
      */
     private static void run(
             Path inputDirectory,
             ProducerConfiguration configuration
     ) throws IOException {
 
+        /*
+         * =========================================================
+         * BƯỚC 1
+         * VALIDATE INPUT DIRECTORY
+         * =========================================================
+         */
+
         validateInputDirectory(
                 inputDirectory
         );
 
-        // Đọc cấu hình application và Kafka.
-        ProducerConfiguration configuration =
-        args.length == 2
-                ? ProducerConfiguration.load(
-                        Path.of(args[1])
-                )
-                : ProducerConfiguration.loadDefault();
 
-        run(
-                inputDirectory,
-                configuration
-        );
+        /*
+         * =========================================================
+         * BƯỚC 2
+         * LIST INPUT FILES
+         * =========================================================
+         */
 
-        // Liệt kê file theo thứ tự tên để kết quả dễ tái lập.
         List<Path> inputFiles =
                 listInputFiles(
                         inputDirectory
                 );
 
+
         if (inputFiles.isEmpty()) {
+
             throw new IllegalArgumentException(
                     "No input files found in: "
                             + inputDirectory
             );
         }
 
-        // Các thành phần của pipeline.
+
+        /*
+         * =========================================================
+         * BƯỚC 3
+         * KHỞI TẠO CÁC THÀNH PHẦN PIPELINE
+         * =========================================================
+         */
+
         FileLogReader fileLogReader =
                 new FileLogReader();
 
@@ -150,7 +244,14 @@ public final class LogProducerApplication {
         KafkaMessageKeyResolver keyResolver =
                 new KafkaMessageKeyResolver();
 
-        // Bộ đếm theo dõi kết quả.
+
+        /*
+         * =========================================================
+         * BƯỚC 4
+         * COUNTERS
+         * =========================================================
+         */
+
         AtomicLong queuedCount =
                 new AtomicLong();
 
@@ -160,12 +261,14 @@ public final class LogProducerApplication {
         AtomicLong failureCount =
                 new AtomicLong();
 
+
         /*
-         * Tạo KafkaProducer thật.
-         *
-         * try-with-resources bảo đảm producer được đóng
-         * khi hoàn thành hoặc khi có lỗi.
+         * =========================================================
+         * BƯỚC 5
+         * CREATE KAFKA PRODUCER + PUBLISHER
+         * =========================================================
          */
+
         try (
                 KafkaProducer<String, String> kafkaProducer =
                         KafkaProducerFactory.create(
@@ -180,19 +283,33 @@ public final class LogProducerApplication {
                                 keyResolver
                         )
         ) {
-            for (Path inputFile : inputFiles) {
+
+            /*
+             * =====================================================
+             * BƯỚC 6
+             * ĐỌC TỪNG FILE
+             * =====================================================
+             */
+
+            for (Path inputFile
+                    : inputFiles) {
 
                 LOGGER.info(
                         "Reading input file: {}",
                         inputFile.getFileName()
                 );
 
+
                 /*
                  * FileLogReader đọc từng dòng.
                  *
-                 * Với mỗi SourceLine:
-                 * 1. Tạo RawNetworkEvent.
-                 * 2. Gửi event bất đồng bộ vào Kafka.
+                 * Với mỗi dòng:
+                 *
+                 * SourceLine
+                 *      ↓
+                 * RawNetworkEvent
+                 *      ↓
+                 * Kafka
                  */
                 long fileLineCount =
                         fileLogReader.read(
@@ -204,7 +321,9 @@ public final class LogProducerApplication {
                                                     sourceLine
                                             );
 
+
                                     queuedCount.incrementAndGet();
+
 
                                     publisher.publish(
                                             event,
@@ -212,36 +331,46 @@ public final class LogProducerApplication {
                                                     metadata,
                                                     exception
                                             ) -> {
-                                                if (
-                                                        exception
-                                                                == null
-                                                ) {
+
+                                                /*
+                                                 * Kafka xác nhận thành công.
+                                                 */
+                                                if (exception == null) {
+
                                                     successCount
                                                             .incrementAndGet();
 
-                                                } else {
-                                                    failureCount
-                                                            .incrementAndGet();
-
-                                                    /*
-                                                     * Không log rawPayload vì
-                                                     * chứa dữ liệu thuê bao.
-                                                     */
-                                                    LOGGER.error(
-                                                            "Kafka send failed: "
-                                                                    + "file={}, "
-                                                                    + "line={}",
-                                                            sourceLine
-                                                                    .sourceFile(),
-                                                            sourceLine
-                                                                    .lineNumber(),
-                                                            exception
-                                                    );
+                                                    return;
                                                 }
+
+
+                                                /*
+                                                 * Kafka send lỗi.
+                                                 */
+                                                failureCount
+                                                        .incrementAndGet();
+
+
+                                                /*
+                                                 * Không log raw payload
+                                                 * vì raw log có thể chứa
+                                                 * dữ liệu thuê bao.
+                                                 */
+                                                LOGGER.error(
+                                                        "Kafka send failed: "
+                                                                + "file={}, "
+                                                                + "line={}",
+                                                        sourceLine
+                                                                .sourceFile(),
+                                                        sourceLine
+                                                                .lineNumber(),
+                                                        exception
+                                                );
                                             }
                                     );
                                 }
                         );
+
 
                 LOGGER.info(
                         "Queued file: {}, lines={}",
@@ -250,14 +379,27 @@ public final class LogProducerApplication {
                 );
             }
 
+
             /*
-             * Chờ toàn bộ message trong buffer được gửi xong.
+             * =====================================================
+             * BƯỚC 7
+             * FLUSH
+             * =====================================================
              *
-             * Sau flush, successCount + failureCount
-             * phải bằng queuedCount.
+             * Chờ toàn bộ message bất đồng bộ
+             * được Kafka trả kết quả.
              */
+
             publisher.flush();
         }
+
+
+        /*
+         * =========================================================
+         * BƯỚC 8
+         * VERIFY SEND RESULT
+         * =========================================================
+         */
 
         LOGGER.info(
                 "Producer completed: "
@@ -269,14 +411,25 @@ public final class LogProducerApplication {
                 failureCount.get()
         );
 
+
+        /*
+         * Có ít nhất một record gửi lỗi.
+         */
         if (failureCount.get() > 0) {
+
             throw new IllegalStateException(
                     "Some messages failed to send: "
                             + failureCount.get()
             );
         }
 
-        if (successCount.get() != queuedCount.get()) {
+
+        /*
+         * Mọi record queued phải có callback success.
+         */
+        if (successCount.get()
+                != queuedCount.get()) {
+
             throw new IllegalStateException(
                     "Message count mismatch: queued="
                             + queuedCount.get()
@@ -286,13 +439,18 @@ public final class LogProducerApplication {
         }
     }
 
+
     /**
-     * Kiểm tra thư mục input.
+     * Kiểm tra input directory tồn tại.
      */
     private static void validateInputDirectory(
             Path inputDirectory
     ) {
-        if (!Files.isDirectory(inputDirectory)) {
+
+        if (!Files.isDirectory(
+                inputDirectory
+        )) {
+
             throw new IllegalArgumentException(
                     "Input directory does not exist: "
                             + inputDirectory
@@ -300,8 +458,15 @@ public final class LogProducerApplication {
         }
     }
 
+
     /**
-     * Lấy danh sách file thường và sắp xếp theo tên.
+     * Lấy tất cả regular file trong input directory
+     * và sort theo tên.
+     *
+     * <p>
+     * Sort giúp cùng một directory luôn được đọc
+     * theo thứ tự deterministic.
+     * </p>
      */
     private static List<Path> listInputFiles(
             Path inputDirectory
@@ -309,10 +474,15 @@ public final class LogProducerApplication {
 
         try (
                 Stream<Path> paths =
-                        Files.list(inputDirectory)
+                        Files.list(
+                                inputDirectory
+                        )
         ) {
+
             return paths
-                    .filter(Files::isRegularFile)
+                    .filter(
+                            Files::isRegularFile
+                    )
                     .sorted()
                     .toList();
         }
