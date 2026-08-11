@@ -1,6 +1,7 @@
-# =====================================
-# Environment and secrets
-# =====================================
+# ============================================================
+# ENVIRONMENT / SECRETS
+# ============================================================
+
 .env
 .env.*
 !.env.example
@@ -11,33 +12,52 @@
 *.jks
 *.p12
 
-# =====================================
-# Maven / Java build
-# =====================================
-flink-preprocess/target/
+
+# ============================================================
+# MAVEN / JAVA BUILD
+# ============================================================
+
 **/target/
+
 *.class
 *.jar
 
 
+# ============================================================
+# PYTHON
+# ============================================================
 
-# =====================================
-# Python
-# =====================================
 __pycache__/
 *.py[cod]
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
 .coverage
 htmlcov/
 
 .venv/
 venv/
 
-# =====================================
-# Large model binaries
-# =====================================
+
+# ============================================================
+# IDE / OS
+# ============================================================
+
+.idea/
+.vscode/
+
+*.iml
+
+.DS_Store
+Thumbs.db
+
+
+# ============================================================
+# MODEL BINARIES
+# ============================================================
+
 inference-service/models/*
 !inference-service/models/README.md
 
@@ -50,32 +70,88 @@ inference-service/models/*
 *.pkl
 *.tflite
 
-# =====================================
-# Flink runtime
-# =====================================
+
+# ============================================================
+# FLINK RUNTIME — CURRENT LAYOUT
+# ============================================================
+#
+# Docker Compose hiện dùng:
+#
+# runtime/flink/checkpoints
+# runtime/flink/savepoints
+# runtime/flink/logs
+# runtime/flink/usrlib
+#
+# Đây đều là runtime artifacts và không được commit.
+# ============================================================
+
+runtime/flink/checkpoints/*
+!runtime/flink/checkpoints/.gitkeep
+
+runtime/flink/savepoints/*
+!runtime/flink/savepoints/.gitkeep
+
+runtime/flink/logs/*
+!runtime/flink/logs/.gitkeep
+
+runtime/flink/usrlib/*
+!runtime/flink/usrlib/.gitkeep
+
+
+# ============================================================
+# FLINK RESTORE MANIFEST
+# ============================================================
+#
+# stop.sh sinh file này để start.sh biết savepoint nào
+# cần restore.
+#
+# Đây là runtime state, tuyệt đối không commit.
+# ============================================================
+
+runtime/flink/restore-manifest.env
+runtime/flink/restore-manifest.env.tmp
+runtime/flink/restore-manifest.env.used.*
+
+
+# ============================================================
+# LEGACY RUNTIME PATHS
+# ============================================================
+#
+# Giữ ignore để tránh vô tình commit dữ liệu cũ nếu directory
+# vẫn tồn tại trên máy local.
+# ============================================================
+
 runtime/checkpoints/*
 runtime/savepoints/*
 runtime/logs/*
 runtime/producer/*
-runtime/flink/**/*.log
-runtime/flink/**/*.out
-runtime/flink/logs/
-runtime/flink/checkpoints/*
-
 
 !runtime/checkpoints/.gitkeep
 !runtime/savepoints/.gitkeep
 !runtime/logs/.gitkeep
 !runtime/producer/.gitkeep
 
-# =====================================
-# NiFi runtime repositories
-# =====================================
+
+# ============================================================
+# NIFI RUNTIME
+# ============================================================
+
 nifi/database_repository/
 
-# =====================================
-# Data
-# =====================================
+
+# ============================================================
+# DATA
+# ============================================================
+
 data/raw/*
 
+# Smoke data được generate lại bởi script.
+data/smoke-gold/*
+
+
+# ============================================================
+# LOG FILES
+# ============================================================
+
 *.log
+*.out

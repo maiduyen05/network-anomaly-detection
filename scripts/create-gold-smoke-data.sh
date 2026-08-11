@@ -2,8 +2,9 @@
 
 set -Eeuo pipefail
 
+
 # ============================================================
-# CẤU HÌNH SMOKE TEST
+# PROJECT PATHS
 # ============================================================
 
 SCRIPT_DIRECTORY="$(
@@ -16,144 +17,275 @@ PROJECT_DIRECTORY="$(
   pwd
 )"
 
-# Producer sẽ đọc riêng thư mục này.
+
+# ============================================================
+# OUTPUT
+# ============================================================
+
 OUTPUT_DIRECTORY="${PROJECT_DIRECTORY}/data/smoke-gold"
-
-# File chứa 40 raw log line.
 OUTPUT_FILE="${OUTPUT_DIRECTORY}/gold-smoke.log"
-
-# IMSI riêng giúp dễ tìm sample smoke test trong Gold topic.
-SMOKE_IMSI="452049999999999"
-
-# Với sequence length 32 và stride 8:
-#
-# 40 event tạo ra:
-# - sample 1: event 1..32;
-# - sample 2: event 9..40.
-EVENT_COUNT=40
-
-# Bronze hiểu EVENT_TIME theo Asia/Ho_Chi_Minh.
-#
-# Lấy phút hiện tại giúp lần smoke test mới có timestamp lớn hơn
-# lần test trước, tránh bị watermark coi là event quá trễ.
-EVENT_MINUTE="$(
-  TZ=Asia/Ho_Chi_Minh date '+%Y-%m-%d %H:%M'
-)"
-
-# DATE_HOUR có định dạng yyyyMMddHH.
-DATE_HOUR="$(
-  TZ=Asia/Ho_Chi_Minh date '+%Y%m%d%H'
-)"
 
 mkdir -p "${OUTPUT_DIRECTORY}"
 
-# ============================================================
-# TẠO 40 RAW LOG CÓ ĐÚNG 52 FIELD
-# ============================================================
-
-awk \
-  -v event_count="${EVENT_COUNT}" \
-  -v event_minute="${EVENT_MINUTE}" \
-  -v date_hour="${DATE_HOUR}" \
-  -v smoke_imsi="${SMOKE_IMSI}" '
-  BEGIN {
-    # Chín EVENT_ID đã được Silver và Gold hỗ trợ.
-    supported_event[0] = "l_service_request"
-    supported_event[1] = "l_tau"
-    supported_event[2] = "l_handover"
-    supported_event[3] = "l_attach"
-    supported_event[4] = "l_pdn_connect"
-    supported_event[5] = "l_bearer_modify"
-    supported_event[6] = "l_dedicated_bearer_activate"
-    supported_event[7] = "l_dedicated_bearer_deactivate"
-    supported_event[8] = "l_detach"
-
-    for (row_index = 0;
-         row_index < event_count;
-         row_index++) {
-
-      # Mỗi vòng lặp tạo lại đủ 52 field rỗng.
-      for (field_index = 1;
-           field_index <= 52;
-           field_index++) {
-        field[field_index] = ""
-      }
-
-      # ------------------------------------------------------
-      # Các vị trí dưới đây là 1-based theo raw log contract.
-      # ------------------------------------------------------
-
-      # 1: EVENT_ID.
-      field[1] = supported_event[row_index % 9]
-
-      # 2: EVENT_RESULT.
-      field[2] = "success"
-
-      # 3: DURATION.
-      field[3] = 1000 + row_index
-
-      # 4: REQUEST_RETRIES.
-      field[4] = row_index % 3
-
-      # 5: SUB_TYPE.
-      field[5] = ""
-
-      # 6: MSISDN.
-      field[6] = "84999999999"
-
-      # 7: IMSI.
-      field[7] = smoke_imsi
-
-      # 8: MTMSI.
-      field[8] = sprintf("SMOKE%04d", row_index)
-
-      # 9: IMEISV.
-      field[9] = "3599999999999999"
-
-      # 10..13: thông tin location.
-      field[10] = "100"
-      field[11] = "10"
-      field[12] = "200"
-      field[13] = "300"
-
-      # 16: L_CAUSE_PROT_TYPE.
-      # 17: CAUSE_CODE.
-      # 18: SUB_CAUSE_CODE.
-      #
-      # Giữ rỗng vì chuỗi rỗng là category hợp lệ trong contract.
-      field[16] = ""
-      field[17] = ""
-      field[18] = ""
-
-      # 49: EVENT_TIME.
-      #
-      # Các event có timestamp tăng dần:
-      # HH:mm:00, HH:mm:01, ..., HH:mm:39.
-      field[49] = sprintf("%s:%02d", event_minute, row_index)
-
-      # 50: PAGING_ATTEMPTS.
-      field[50] = "0"
-
-      # 52: DATE_HOUR.
-      field[52] = date_hour
-
-      # Ghi field đầu tiên.
-      printf "%s", field[1]
-
-      # Ghi 51 field còn lại, mỗi field có một dấu ";" phía trước.
-      for (field_index = 2;
-           field_index <= 52;
-           field_index++) {
-        printf ";%s", field[field_index]
-      }
-
-      printf "\n"
-    }
-  }
-' > "${OUTPUT_FILE}"
 
 # ============================================================
-# KIỂM TRA FILE VỪA TẠO
+# UNIQUE IMSI
+# ============================================================
+#
+# Mỗi lần smoke test dùng một IMSI mới.
+#
+# 45204 + 10 số = IMSI 15 chữ số.
+# ============================================================
+
+SMOKE_SUFFIX="$(
+  date +%s%N |
+    tail -c 11
+)"
+
+SMOKE_IMSI="45204${SMOKE_SUFFIX}"
+
+
+# ============================================================
+# EVENT PLAN
+# ============================================================
+#
+# 40 target events:
+#
+#   event 1..32  -> Gold window 1
+#   event 9..40  -> Gold window 2
+#
+# Event 41 nằm ở t + 70 giây để đẩy watermark.
+# ============================================================
+
+TARGET_EVENT_COUNT=40
+FLUSH_OFFSET_SECONDS=70
+TOTAL_EVENT_COUNT=$((TARGET_EVENT_COUNT + 1))
+
+
+# ============================================================
+# EVENT TIME
+# ============================================================
+
+BASE_MINUTE="$(
+  TZ=Asia/Ho_Chi_Minh \
+    date '+%Y-%m-%d %H:%M'
+)"
+
+BASE_EPOCH="$(
+  TZ=Asia/Ho_Chi_Minh \
+    date \
+      -d "${BASE_MINUTE}:00" \
+      '+%s'
+)"
+
+BASE_DATE_HOUR="$(
+  TZ=Asia/Ho_Chi_Minh \
+    date \
+      -d "@${BASE_EPOCH}" \
+      '+%Y%m%d%H'
+)"
+
+FLUSH_EPOCH=$((BASE_EPOCH + FLUSH_OFFSET_SECONDS))
+
+FLUSH_EVENT_TIME="$(
+  TZ=Asia/Ho_Chi_Minh \
+    date \
+      -d "@${FLUSH_EPOCH}" \
+      '+%Y-%m-%d %H:%M:%S'
+)"
+
+FLUSH_DATE_HOUR="$(
+  TZ=Asia/Ho_Chi_Minh \
+    date \
+      -d "@${FLUSH_EPOCH}" \
+      '+%Y%m%d%H'
+)"
+
+
+# ============================================================
+# SUPPORTED EVENT IDs
+# ============================================================
+
+SUPPORTED_EVENTS=(
+  "l_service_request"
+  "l_tau"
+  "l_handover"
+  "l_attach"
+  "l_pdn_connect"
+  "l_bearer_modify"
+  "l_dedicated_bearer_activate"
+  "l_dedicated_bearer_deactivate"
+  "l_detach"
+)
+
+
+# ============================================================
+# CREATE EMPTY OUTPUT FILE
+# ============================================================
+
+: > "${OUTPUT_FILE}"
+
+
+# ============================================================
+# GENERATE 41 RAW RECORDS
+# ============================================================
+#
+# Bash array sử dụng index 0-based:
+#
+# fields[0]  = raw field 1
+# fields[48] = raw field 49
+# fields[51] = raw field 52
+# ============================================================
+
+for ((row_index = 0; row_index < TOTAL_EVENT_COUNT; row_index++)); do
+
+  # ----------------------------------------------------------
+  # Khởi tạo đúng 52 field rỗng
+  # ----------------------------------------------------------
+
+  fields=()
+
+  for ((field_index = 0; field_index < 52; field_index++)); do
+    fields[field_index]=""
+  done
+
+
+  # ----------------------------------------------------------
+  # FIELD 1: EVENT_ID
+  # ----------------------------------------------------------
+
+  fields[0]="${SUPPORTED_EVENTS[$((row_index % 9))]}"
+
+
+  # ----------------------------------------------------------
+  # FIELD 2: EVENT_RESULT
+  # ----------------------------------------------------------
+
+  fields[1]="success"
+
+
+  # ----------------------------------------------------------
+  # FIELD 3: DURATION
+  # ----------------------------------------------------------
+
+  fields[2]="$((1000 + row_index))"
+
+
+  # ----------------------------------------------------------
+  # FIELD 4: REQUEST_RETRIES
+  # ----------------------------------------------------------
+
+  fields[3]="$((row_index % 3))"
+
+
+  # ----------------------------------------------------------
+  # FIELD 5: SUB_TYPE
+  # ----------------------------------------------------------
+
+  fields[4]=""
+
+
+  # ----------------------------------------------------------
+  # FIELD 6: MSISDN
+  # ----------------------------------------------------------
+
+  fields[5]="84999999999"
+
+
+  # ----------------------------------------------------------
+  # FIELD 7: IMSI
+  # ----------------------------------------------------------
+
+  fields[6]="${SMOKE_IMSI}"
+
+
+  # ----------------------------------------------------------
+  # FIELD 8: MTMSI
+  # ----------------------------------------------------------
+
+  printf -v fields[7] \
+    'SMOKE%04d' \
+    "${row_index}"
+
+
+  # ----------------------------------------------------------
+  # FIELD 9: IMEISV
+  # ----------------------------------------------------------
+
+  fields[8]="3599999999999999"
+
+
+  # ----------------------------------------------------------
+  # NETWORK / LOCATION
+  # ----------------------------------------------------------
+
+  fields[9]="100"
+  fields[10]="10"
+  fields[11]="200"
+  fields[12]="300"
+
+
+  # ----------------------------------------------------------
+  # FIELD 16, 17, 18
+  #
+  # cause / sub-cause giữ rỗng.
+  # Empty string là category hợp lệ trong feature contract.
+  # ----------------------------------------------------------
+
+  fields[15]=""
+  fields[16]=""
+  fields[17]=""
+
+
+  # ----------------------------------------------------------
+  # FIELD 49: EVENT_TIME
+  # FIELD 52: DATE_HOUR
+  # ----------------------------------------------------------
+
+  if ((row_index < TARGET_EVENT_COUNT)); then
+
+    printf -v fields[48] \
+      '%s:%02d' \
+      "${BASE_MINUTE}" \
+      "${row_index}"
+
+    fields[51]="${BASE_DATE_HOUR}"
+
+  else
+
+    fields[48]="${FLUSH_EVENT_TIME}"
+    fields[51]="${FLUSH_DATE_HOUR}"
+
+  fi
+
+
+  # ----------------------------------------------------------
+  # FIELD 50: PAGING_ATTEMPTS
+  # ----------------------------------------------------------
+
+  fields[49]="0"
+
+
+  # ==========================================================
+  # WRITE EXACTLY 52 FIELDS
+  # ==========================================================
+
+  {
+    printf '%s' "${fields[0]}"
+
+    for ((field_index = 1; field_index < 52; field_index++)); do
+      printf ';%s' "${fields[field_index]}"
+    done
+
+    printf '\n'
+
+  } >> "${OUTPUT_FILE}"
+
+done
+
+
+# ============================================================
+# VALIDATION
 # ============================================================
 
 ACTUAL_LINE_COUNT="$(
@@ -172,18 +304,58 @@ INVALID_FIELD_COUNT_LINES="$(
   ' "${OUTPUT_FILE}"
 )"
 
-if [[ "${ACTUAL_LINE_COUNT}" -ne "${EVENT_COUNT}" ]]; then
-  echo "Sai số dòng: ${ACTUAL_LINE_COUNT}" >&2
+
+if [[ "${ACTUAL_LINE_COUNT}" -ne "${TOTAL_EVENT_COUNT}" ]]; then
+
+  echo
+  echo "ERROR: Sai số lượng raw record." >&2
+  echo "Expected: ${TOTAL_EVENT_COUNT}" >&2
+  echo "Actual:   ${ACTUAL_LINE_COUNT}" >&2
+
   exit 1
 fi
+
 
 if [[ "${INVALID_FIELD_COUNT_LINES}" -ne 0 ]]; then
-  echo "Có dòng không đủ 52 field" >&2
+
+  echo
+  echo "ERROR: Có raw record không đủ đúng 52 field." >&2
+  echo "Invalid rows: ${INVALID_FIELD_COUNT_LINES}" >&2
+
   exit 1
 fi
 
-echo "Đã tạo smoke data thành công."
-echo "File: ${OUTPUT_FILE}"
-echo "Số dòng: ${ACTUAL_LINE_COUNT}"
-echo "IMSI: ${SMOKE_IMSI}"
-echo "Event minute: ${EVENT_MINUTE}"
+
+# ============================================================
+# RESULT
+# ============================================================
+
+echo
+echo "================================================"
+echo " GOLD SMOKE DATA CREATED"
+echo "================================================"
+echo
+echo "File:"
+echo "  ${OUTPUT_FILE}"
+echo
+echo "Unique IMSI:"
+echo "  ${SMOKE_IMSI}"
+echo
+echo "Target events:"
+echo "  ${TARGET_EVENT_COUNT}"
+echo
+echo "Flush events:"
+echo "  1"
+echo
+echo "Total raw events:"
+echo "  ${TOTAL_EVENT_COUNT}"
+echo
+echo "Target event time:"
+echo "  ${BASE_MINUTE}:00 .. ${BASE_MINUTE}:39"
+echo
+echo "Flush event time:"
+echo "  ${FLUSH_EVENT_TIME}"
+echo
+echo "Expected isolated Gold windows:"
+echo "  2"
+echo
