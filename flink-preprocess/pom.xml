@@ -92,6 +92,7 @@
             <scope>test</scope>
         </dependency>
 
+
         <!--
             Test JAR của flink-streaming-java.
 
@@ -204,6 +205,17 @@
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
+        </dependency>
+
+        <!--
+            RocksDB state backend cho Gold keyed state.
+            Không dùng scope=provided vì image Flink hiện tại
+            không chứa RocksDB backend.
+        -->
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-statebackend-rocksdb</artifactId>
+            <version>${flink.version}</version>
         </dependency>
 
     </dependencies>

@@ -173,9 +173,11 @@ services:
         taskmanager.bind-host: 0.0.0.0
         taskmanager.host: flink-taskmanager
 
-        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-9}
+        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-3}
         taskmanager.memory.process.size: 3g
-        taskmanager.memory.managed.size: 0b
+        taskmanager.memory.managed.size: 768m
+
+        state.backend.rocksdb.memory.managed: true
 
         parallelism.default: ${FLINK_PARALLELISM:-3}
 

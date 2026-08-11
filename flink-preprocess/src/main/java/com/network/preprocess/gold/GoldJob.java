@@ -9,6 +9,7 @@ import com.network.preprocess.model.SilverEvent;
 import com.network.preprocess.runtime.FlinkEnvironmentConfigurator;
 import com.network.preprocess.sink.GoldKafkaSinks;
 import com.network.preprocess.source.SilverEventKafkaSource;
+import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -149,6 +150,15 @@ public final class GoldJob {
         FlinkEnvironmentConfigurator.configure(
                 env,
                 config
+        );
+
+        /*
+         * Gold có keyed state lớn theo ueKey.
+         * RocksDB giữ working state ngoài Java heap,
+         * tránh OOM khi replay full dataset.
+         */
+        env.setStateBackend(
+                new EmbeddedRocksDBStateBackend(true)
         );
 
 
