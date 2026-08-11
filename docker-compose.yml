@@ -128,6 +128,7 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.bind-host: 0.0.0.0
+        jobmanager.memory.process.size: 768m
         rest.address: 0.0.0.0
         rest.bind-address: 0.0.0.0
         parallelism.default: ${FLINK_PARALLELISM:-1}
@@ -172,6 +173,7 @@ services:
         taskmanager.bind-host: 0.0.0.0
         taskmanager.host: flink-taskmanager
         taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-3}
+        taskmanager.memory.process.size: 3g
         parallelism.default: ${FLINK_PARALLELISM:-1}
         state.checkpoints.dir: file:///opt/flink/runtime/checkpoints
         state.savepoints.dir: file:///opt/flink/runtime/savepoints
