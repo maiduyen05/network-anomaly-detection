@@ -168,7 +168,7 @@ class GoldJobConfigTest {
          * feature-contract.feature-version
          */
         assertEquals(
-                "gold-ue-sequence-feature-v1",
+                "gold-ue-sequence-feature-v2",
                 config.featureVersion()
         );
 

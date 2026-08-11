@@ -751,7 +751,7 @@ public record GoldFeatureContract(
          * </p>
          *
          * <pre>
-         * gold-ue-sequence-feature-v1
+         * gold-ue-sequence-feature-v2
          * </pre>
          *
          * mọi thành phần ảnh hưởng đến tensor phải giữ nguyên.
@@ -780,7 +780,7 @@ public record GoldFeatureContract(
         */
 
         requireExact(
-                "gold-ue-sequence-feature-v1",
+                "gold-ue-sequence-feature-v2",
                 contract.featureVersion(),
                 "feature-version"
         );
@@ -924,8 +924,9 @@ public record GoldFeatureContract(
                         Map.entry("l_detach", 5),
                         Map.entry("l_handover", 6),
                         Map.entry("l_pdn_connect", 7),
-                        Map.entry("l_service_request", 8),
-                        Map.entry("l_tau", 9)
+                        Map.entry("l_pdn_disconnect", 8),
+                        Map.entry("l_service_request", 9),
+                        Map.entry("l_tau", 10)
                 )
         );
 
@@ -944,8 +945,9 @@ public record GoldFeatureContract(
                 "eventResult",
                 "fixed_vocabulary_lookup",
                 Map.of(
-                        "reject", 0,
-                        "success", 1
+                        "abort", 1,
+                        "reject", 2,
+                        "success", 3
                 )
         );
 
@@ -963,9 +965,32 @@ public record GoldFeatureContract(
                 new LinkedHashMap<>();
 
         expectedCauseVocabulary.put("", 0);
-        expectedCauseVocabulary.put("10", 1);
-        expectedCauseVocabulary.put("38", 2);
-        expectedCauseVocabulary.put("9", 3);
+        expectedCauseVocabulary.put("0", 1);
+        expectedCauseVocabulary.put("10", 2);
+        expectedCauseVocabulary.put("11", 3);
+        expectedCauseVocabulary.put("13", 4);
+        expectedCauseVocabulary.put("15", 5);
+        expectedCauseVocabulary.put("16", 6);
+        expectedCauseVocabulary.put("17", 7);
+        expectedCauseVocabulary.put("26", 8);
+        expectedCauseVocabulary.put("3", 9);
+        expectedCauseVocabulary.put("30", 10);
+        expectedCauseVocabulary.put("31", 11);
+        expectedCauseVocabulary.put("32", 12);
+        expectedCauseVocabulary.put("34", 13);
+        expectedCauseVocabulary.put("38", 14);
+        expectedCauseVocabulary.put("39", 15);
+        expectedCauseVocabulary.put("40", 16);
+        expectedCauseVocabulary.put("43", 17);
+        expectedCauseVocabulary.put("53", 18);
+        expectedCauseVocabulary.put("6", 19);
+        expectedCauseVocabulary.put("65", 20);
+        expectedCauseVocabulary.put("7", 21);
+        expectedCauseVocabulary.put("73", 22);
+        expectedCauseVocabulary.put("87", 23);
+        expectedCauseVocabulary.put("88", 24);
+        expectedCauseVocabulary.put("9", 25);
+        expectedCauseVocabulary.put("unspecified", 26);
 
         requireCategoricalFeature(
                 contract,
@@ -984,16 +1009,72 @@ public record GoldFeatureContract(
         * =============================================================
         */
 
-        Map<String, Integer> expectedSubCauseVocabulary =
-                new LinkedHashMap<>();
+       Map<String, Integer> expectedSubCauseVocabulary =
+        new LinkedHashMap<>();
 
         expectedSubCauseVocabulary.put("", 0);
-        expectedSubCauseVocabulary.put("107", 1);
-        expectedSubCauseVocabulary.put("11", 2);
-        expectedSubCauseVocabulary.put("14", 3);
-        expectedSubCauseVocabulary.put("403", 4);
-        expectedSubCauseVocabulary.put("410", 5);
-        expectedSubCauseVocabulary.put("413", 6);
+        expectedSubCauseVocabulary.put("1", 1);
+        expectedSubCauseVocabulary.put("102", 2);
+        expectedSubCauseVocabulary.put("104", 3);
+        expectedSubCauseVocabulary.put("107", 4);
+        expectedSubCauseVocabulary.put("108", 5);
+        expectedSubCauseVocabulary.put("109", 6);
+        expectedSubCauseVocabulary.put("11", 7);
+        expectedSubCauseVocabulary.put("12", 8);
+        expectedSubCauseVocabulary.put("13", 9);
+        expectedSubCauseVocabulary.put("14", 10);
+        expectedSubCauseVocabulary.put("15", 11);
+        expectedSubCauseVocabulary.put("16", 12);
+        expectedSubCauseVocabulary.put("17", 13);
+        expectedSubCauseVocabulary.put("2", 14);
+        expectedSubCauseVocabulary.put("204", 15);
+        expectedSubCauseVocabulary.put("3", 16);
+        expectedSubCauseVocabulary.put("304", 17);
+        expectedSubCauseVocabulary.put("306", 18);
+        expectedSubCauseVocabulary.put("308", 19);
+        expectedSubCauseVocabulary.put("311", 20);
+        expectedSubCauseVocabulary.put("312", 21);
+        expectedSubCauseVocabulary.put("315", 22);
+        expectedSubCauseVocabulary.put("316", 23);
+        expectedSubCauseVocabulary.put("317", 24);
+        expectedSubCauseVocabulary.put("318", 25);
+        expectedSubCauseVocabulary.put("403", 26);
+        expectedSubCauseVocabulary.put("405", 27);
+        expectedSubCauseVocabulary.put("410", 28);
+        expectedSubCauseVocabulary.put("413", 29);
+        expectedSubCauseVocabulary.put("419", 30);
+        expectedSubCauseVocabulary.put("420", 31);
+        expectedSubCauseVocabulary.put("422", 32);
+        expectedSubCauseVocabulary.put("423", 33);
+        expectedSubCauseVocabulary.put("424", 34);
+        expectedSubCauseVocabulary.put("427", 35);
+        expectedSubCauseVocabulary.put("428", 36);
+        expectedSubCauseVocabulary.put("429", 37);
+        expectedSubCauseVocabulary.put("430", 38);
+        expectedSubCauseVocabulary.put("435", 39);
+        expectedSubCauseVocabulary.put("440", 40);
+        expectedSubCauseVocabulary.put("441", 41);
+        expectedSubCauseVocabulary.put("5", 42);
+        expectedSubCauseVocabulary.put("503", 43);
+        expectedSubCauseVocabulary.put("504", 44);
+        expectedSubCauseVocabulary.put("505", 45);
+        expectedSubCauseVocabulary.put("506", 46);
+        expectedSubCauseVocabulary.put("507", 47);
+        expectedSubCauseVocabulary.put("509", 48);
+        expectedSubCauseVocabulary.put("603", 49);
+        expectedSubCauseVocabulary.put("605", 50);
+        expectedSubCauseVocabulary.put("606", 51);
+        expectedSubCauseVocabulary.put("607", 52);
+        expectedSubCauseVocabulary.put("608", 53);
+        expectedSubCauseVocabulary.put("610", 54);
+        expectedSubCauseVocabulary.put("611", 55);
+        expectedSubCauseVocabulary.put("7", 56);
+        expectedSubCauseVocabulary.put("704", 57);
+        expectedSubCauseVocabulary.put("706", 58);
+        expectedSubCauseVocabulary.put("709", 59);
+        expectedSubCauseVocabulary.put("710", 60);
+        expectedSubCauseVocabulary.put("8", 61);
+        expectedSubCauseVocabulary.put("9", 62);
 
         requireCategoricalFeature(
                 contract,
@@ -1438,7 +1519,7 @@ public record GoldFeatureContract(
 
         return new IllegalStateException(
                 "Feature contract is incompatible with "
-                        + "gold-ue-sequence-feature-v1: "
+                        + "gold-ue-sequence-feature-v2: "
                         + path
                         + " expected <"
                         + expected

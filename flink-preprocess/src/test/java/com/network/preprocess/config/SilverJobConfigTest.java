@@ -50,6 +50,11 @@ class SilverJobConfigTest {
                 config.eventDefinitionsByAlias()
                         .containsKey("l_service_request")
         );
+
+        assertTrue(
+                config.eventDefinitionsByAlias()
+                        .containsKey("l_pdn_disconnect")
+        );
     }
 
     @Test

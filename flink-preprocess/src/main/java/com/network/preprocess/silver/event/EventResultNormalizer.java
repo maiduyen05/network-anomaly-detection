@@ -7,36 +7,43 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Chuẩn hóa EVENT_RESULT theo đúng feature contract.
+ * Chuẩn hóa EVENT_RESULT theo feature contract v2.
  *
- * <p>Chỉ hai category được công nhận:</p>
+ * <p>
+ * Bốn category hợp lệ:
+ * </p>
  *
  * <ul>
+ *     <li>""</li>
+ *     <li>abort</li>
  *     <li>reject</li>
  *     <li>success</li>
  * </ul>
  *
- * <p>Không tự chuyển failure hoặc timeout thành reject.
- * Việc làm đó sẽ thay đổi ý nghĩa dữ liệu mà chưa có
- * tài liệu training xác nhận.</p>
+ * <p>
+ * Null vẫn là missing.
+ * Empty string là category hợp lệ.
+ * </p>
  */
 public final class EventResultNormalizer {
 
     private EventResultNormalizer() {
-        // Utility class không cần tạo object.
+        // Utility class không cần instance.
     }
 
     /**
      * Chuẩn hóa EVENT_RESULT.
      *
-     * @return Optional.empty nếu thiếu hoặc không thuộc contract
+     * @return Optional.empty chỉ khi null hoặc unknown category
      */
     public static Optional<EventResult> normalize(
             String rawEventResult
     ) {
-        if (rawEventResult == null
-                || rawEventResult.isBlank()) {
 
+        /*
+         * Null nghĩa là field thực sự không tồn tại.
+         */
+        if (rawEventResult == null) {
             return Optional.empty();
         }
 
@@ -46,11 +53,29 @@ public final class EventResultNormalizer {
                         .toLowerCase(Locale.ROOT);
 
         return switch (lookupKey) {
+
+            /*
+             * Empty string là category hợp lệ của contract v2.
+             */
+            case "" ->
+                    Optional.of(
+                            EventResult.EMPTY
+                    );
+
+            case "abort" ->
+                    Optional.of(
+                            EventResult.ABORT
+                    );
+
             case "reject" ->
-                    Optional.of(EventResult.REJECT);
+                    Optional.of(
+                            EventResult.REJECT
+                    );
 
             case "success" ->
-                    Optional.of(EventResult.SUCCESS);
+                    Optional.of(
+                            EventResult.SUCCESS
+                    );
 
             default ->
                     Optional.empty();
@@ -58,19 +83,13 @@ public final class EventResultNormalizer {
     }
 
     /**
-     * Kiểm tra raw value có bị thay đổi cách biểu diễn không.
-     *
-     * <p>Ví dụ:</p>
-     *
-     * <pre>
-     * "success"   → false
-     * " SUCCESS " → true
-     * </pre>
+     * Kiểm tra raw representation có được normalize hay không.
      */
     public static boolean wasChanged(
             String rawEventResult,
             EventResult normalizedEventResult
     ) {
+
         Objects.requireNonNull(
                 rawEventResult,
                 "rawEventResult must not be null"
@@ -83,6 +102,8 @@ public final class EventResultNormalizer {
 
         return !normalizedEventResult
                 .wireValue()
-                .equals(rawEventResult.trim());
+                .equals(
+                        rawEventResult.trim()
+                );
     }
 }

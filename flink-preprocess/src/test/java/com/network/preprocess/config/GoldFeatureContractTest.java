@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </p>
  *
  * <pre>
- * gold-ue-sequence-feature-v1
+ * gold-ue-sequence-feature-v2
  * </pre>
  *
  * thì mọi thành phần ảnh hưởng đến model input phải giữ nguyên.
@@ -58,7 +58,7 @@ class GoldFeatureContractTest {
          */
 
         assertEquals(
-                "gold-ue-sequence-feature-v1",
+                "gold-ue-sequence-feature-v2",
                 contract.featureVersion()
         );
 
@@ -313,8 +313,8 @@ class GoldFeatureContractTest {
         String yaml =
                 validContract()
                         .replace(
-                                "gold-ue-sequence-feature-v1",
-                                "gold-ue-sequence-feature-v2"
+                                "gold-ue-sequence-feature-v2",
+                                "gold-ue-sequence-feature-v3"
                         );
 
         assertInvalidContract(
@@ -427,7 +427,7 @@ class GoldFeatureContractTest {
         * incidental indentation, dễ tạo YAML sai cấu trúc.
         */
         String vocabularyEntry =
-                "          l_tau: 9";
+                "          l_tau: 10";
 
         String yaml =
                 validContract()
@@ -435,7 +435,7 @@ class GoldFeatureContractTest {
                                 vocabularyEntry,
                                 vocabularyEntry
                                         + "\n"
-                                        + "          l_new_event: 10"
+                                        + "          l_new_event: 11"
                         );
 
         assertInvalidContract(
@@ -742,7 +742,7 @@ class GoldFeatureContractTest {
 
         return """
                 feature-contract:
-                  feature-version: gold-ue-sequence-feature-v1
+                  feature-version: gold-ue-sequence-feature-v2
 
                   sequence:
                     length: 32
@@ -778,8 +778,9 @@ class GoldFeatureContractTest {
                           l_detach: 5
                           l_handover: 6
                           l_pdn_connect: 7
-                          l_service_request: 8
-                          l_tau: 9
+                          l_pdn_disconnect: 8
+                          l_service_request: 9
+                          l_tau: 10
 
 
                       - index: 1

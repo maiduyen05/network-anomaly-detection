@@ -152,10 +152,10 @@ class GoldFeatureEncoderTest {
 
         assertArrayEquals(
                 new long[]{
-                        1L,
-                        0L,
-                        0L,
-                        0L
+                        1L, // l_attach
+                        2L, // reject
+                        0L, // empty cause
+                        0L  // empty sub-cause
                 },
                 xCat[0]
         );
@@ -178,10 +178,10 @@ class GoldFeatureEncoderTest {
 
         assertArrayEquals(
                 new long[]{
-                        8L,
-                        1L,
-                        1L,
-                        1L
+                        9L, // l_service_request
+                        3L, // success
+                        2L, // cause 10
+                        4L  // sub-cause 107
                 },
                 xCat[1]
         );
@@ -211,10 +211,10 @@ class GoldFeatureEncoderTest {
 
         assertArrayEquals(
                 new long[]{
-                        9L,
-                        1L,
+                        10L,
                         3L,
-                        6L
+                        25L,
+                        29L
                 },
                 xCat[2]
         );
@@ -266,6 +266,52 @@ class GoldFeatureEncoderTest {
                 exception.getReason()
         );
     }
+
+        @Test
+        void shouldEncodeNewV2Categories() {
+
+        List<GoldSequenceEvent> sequence =
+                new ArrayList<>();
+
+        sequence.add(
+                event(
+                        "l_pdn_disconnect",
+                        "abort",
+                        "unspecified",
+                        "304",
+                        1_000L,
+                        1
+                )
+        );
+
+        while (sequence.size() < 32) {
+                sequence.add(
+                        event(
+                                "l_attach",
+                                "success",
+                                "",
+                                "",
+                                1_000L,
+                                0
+                        )
+                );
+        }
+
+        GoldModelInput modelInput =
+                encoder().encode(
+                        sequence
+                );
+
+        assertArrayEquals(
+                new long[]{
+                        8L,  // l_pdn_disconnect
+                        1L,  // abort
+                        26L, // unspecified cause
+                        17L  // sub-cause 304
+                },
+                modelInput.getXCat()[0]
+        );
+        }
 
 
     /**

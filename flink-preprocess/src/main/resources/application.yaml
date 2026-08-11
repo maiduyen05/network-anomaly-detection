@@ -346,7 +346,7 @@ gold:
 # ============================================================
 
 feature-contract:
-  feature-version: gold-ue-sequence-feature-v1
+  feature-version: gold-ue-sequence-feature-v2
 
 
   # ==========================================================
@@ -357,10 +357,8 @@ feature-contract:
     length: 32
     stride: 8
 
-    # Hiện chưa dùng padding vì chỉ emit khi đủ 32 event.
     padding-side: LEFT
 
-    # Chỉ phát sample khi đủ 32 event.
     emit-partial-windows: false
 
 
@@ -373,38 +371,27 @@ feature-contract:
 
     feature-count: 4
 
-
-    # --------------------------------------------------------
-    # Normalization
-    # --------------------------------------------------------
-
     normalization:
       trim: true
       lowercase: true
 
     ordering: LEXICOGRAPHIC_ASCENDING
 
-
-    # --------------------------------------------------------
-    # Unknown / missing policy
-    # --------------------------------------------------------
-
-    # Không tự thêm category mới khi Flink đang chạy.
+    # Runtime không tự sinh ID mới.
     unknown-policy: REJECT
 
-    # Missing categorical feature bị reject.
+    # Missing EVENT_ID/EVENT_RESULT vẫn invalid.
     missing-policy: REJECT
-
-
-    # --------------------------------------------------------
-    # Feature definitions
-    # --------------------------------------------------------
 
     features:
 
       # ======================================================
       # x_cat[:, 0]
       # EVENT_ID
+      #
+      # 10 event observed trong dataset hiện tại.
+      # Non-empty category được map 1..N theo thứ tự
+      # lexicographic.
       # ======================================================
 
       - index: 0
@@ -420,13 +407,22 @@ feature-contract:
           l_detach: 5
           l_handover: 6
           l_pdn_connect: 7
-          l_service_request: 8
-          l_tau: 9
+          l_pdn_disconnect: 8
+          l_service_request: 9
+          l_tau: 10
 
 
       # ======================================================
       # x_cat[:, 1]
       # EVENT_RESULT
+      #
+      # Dataset hiện tại:
+      #
+      # abort
+      # reject
+      # success
+      #
+      # 8 blank values không phải category.
       # ======================================================
 
       - index: 1
@@ -435,13 +431,19 @@ feature-contract:
         transform: fixed_vocabulary_lookup
 
         vocabulary:
-          reject: 0
-          success: 1
+          abort: 1
+          reject: 2
+          success: 3
 
 
       # ======================================================
       # x_cat[:, 2]
       # CAUSE_CODE
+      #
+      # Empty string là category thực sự trong source.
+      #
+      # "unspecified" cũng xuất hiện explicit trong dataset,
+      # vì vậy giữ nguyên meaning thay vì map vào empty.
       # ======================================================
 
       - index: 2
@@ -449,17 +451,43 @@ feature-contract:
         source: rawFields.CAUSE_CODE
         transform: fixed_vocabulary_lookup
 
-        # Empty string là category hợp lệ.
         vocabulary:
           "": 0
-          "10": 1
-          "38": 2
-          "9": 3
+          "0": 1
+          "10": 2
+          "11": 3
+          "13": 4
+          "15": 5
+          "16": 6
+          "17": 7
+          "26": 8
+          "3": 9
+          "30": 10
+          "31": 11
+          "32": 12
+          "34": 13
+          "38": 14
+          "39": 15
+          "40": 16
+          "43": 17
+          "53": 18
+          "6": 19
+          "65": 20
+          "7": 21
+          "73": 22
+          "87": 23
+          "88": 24
+          "9": 25
+          unspecified: 26
 
 
       # ======================================================
       # x_cat[:, 3]
       # SUB_CAUSE_CODE
+      #
+      # 63 category observed trong dataset hiện tại.
+      # Empty string = 0.
+      # Non-empty category = 1..N lexicographic.
       # ======================================================
 
       - index: 3
@@ -467,15 +495,70 @@ feature-contract:
         source: rawFields.SUB_CAUSE_CODE
         transform: fixed_vocabulary_lookup
 
-        # Empty string là category hợp lệ.
         vocabulary:
           "": 0
-          "107": 1
-          "11": 2
-          "14": 3
-          "403": 4
-          "410": 5
-          "413": 6
+          "1": 1
+          "102": 2
+          "104": 3
+          "107": 4
+          "108": 5
+          "109": 6
+          "11": 7
+          "12": 8
+          "13": 9
+          "14": 10
+          "15": 11
+          "16": 12
+          "17": 13
+          "2": 14
+          "204": 15
+          "3": 16
+          "304": 17
+          "306": 18
+          "308": 19
+          "311": 20
+          "312": 21
+          "315": 22
+          "316": 23
+          "317": 24
+          "318": 25
+          "403": 26
+          "405": 27
+          "410": 28
+          "413": 29
+          "419": 30
+          "420": 31
+          "422": 32
+          "423": 33
+          "424": 34
+          "427": 35
+          "428": 36
+          "429": 37
+          "430": 38
+          "435": 39
+          "440": 40
+          "441": 41
+          "5": 42
+          "503": 43
+          "504": 44
+          "505": 45
+          "506": 46
+          "507": 47
+          "509": 48
+          "603": 49
+          "605": 50
+          "606": 51
+          "607": 52
+          "608": 53
+          "610": 54
+          "611": 55
+          "7": 56
+          "704": 57
+          "706": 58
+          "709": 59
+          "710": 60
+          "8": 61
+          "9": 62
 
 
   # ==========================================================
@@ -487,22 +570,11 @@ feature-contract:
 
     feature-count: 2
 
-    # Numeric source = null.
     missing-value: -1.0
-
-
-    # --------------------------------------------------------
-    # Normalized output range
-    # --------------------------------------------------------
 
     normalized-valid-range:
       min: 0.0
       max: 1.0
-
-
-    # --------------------------------------------------------
-    # Numeric feature definitions
-    # --------------------------------------------------------
 
     features:
 

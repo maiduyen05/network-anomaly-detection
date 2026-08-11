@@ -115,7 +115,7 @@ class GoldFeatureProcessFunctionTest {
         );
 
         assertEquals(
-                "gold-ue-sequence-feature-v1",
+                "gold-ue-sequence-feature-v2",
                 sample.getFeatureVersion()
         );
 
@@ -168,7 +168,7 @@ class GoldFeatureProcessFunctionTest {
         assertArrayEquals(
                 new long[]{
                         1L,
-                        1L,
+                        3L,
                         0L,
                         0L
                 },
@@ -479,7 +479,7 @@ class GoldFeatureProcessFunctionTest {
 
         return new GoldSequenceWindow(
                 "gold-sequence-v1",
-                "gold-ue-sequence-feature-v1",
+                "gold-ue-sequence-feature-v2",
                 "sample-001",
                 "452040000000001",
                 "452040000000001",

@@ -350,7 +350,7 @@ class GoldSequenceProcessFunctionTest {
                         /*
                          * Phiên bản feature contract dùng bởi model.
                          */
-                        "gold-ue-sequence-feature-v1"
+                        "gold-ue-sequence-feature-v2"
                 );
 
         KeyedProcessOperator<

@@ -72,7 +72,7 @@ EXPECTED_SEQUENCE_STRIDE=8
 EXPECTED_CAT_FEATURE_COUNT=4
 EXPECTED_NUM_FEATURE_COUNT=2
 
-EXPECTED_FEATURE_VERSION="gold-ue-sequence-feature-v1"
+EXPECTED_FEATURE_VERSION="gold-ue-sequence-feature-v2"
 
 
 # ============================================================

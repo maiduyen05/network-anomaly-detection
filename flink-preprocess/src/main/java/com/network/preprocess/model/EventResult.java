@@ -5,9 +5,36 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.io.Serializable;
 
 /**
- * Kết quả sự kiện được feature contract hỗ trợ.
+ * Kết quả sự kiện được Silver/Gold feature contract hỗ trợ.
+ *
+ * <p>
+ * Contract v2 giữ nguyên bốn giá trị thực tế quan sát được
+ * trong raw dataset:
+ * </p>
+ *
+ * <ul>
+ *     <li>empty string</li>
+ *     <li>abort</li>
+ *     <li>reject</li>
+ *     <li>success</li>
+ * </ul>
+ *
+ * <p>
+ * Empty string là một category explicit của contract v2.
+ * Null vẫn được xem là missing.
+ * </p>
  */
 public enum EventResult implements Serializable {
+
+    EMPTY(
+            "",
+            "Empty"
+    ),
+
+    ABORT(
+            "abort",
+            "Abort"
+    ),
 
     REJECT(
             "reject",
@@ -26,7 +53,7 @@ public enum EventResult implements Serializable {
     private final String wireValue;
 
     /**
-     * Nhãn thân thiện dùng cho dashboard.
+     * Nhãn dùng cho UI/evidence.
      */
     private final String displayLabel;
 

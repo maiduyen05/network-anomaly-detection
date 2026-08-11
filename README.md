@@ -330,7 +330,7 @@ flink-preprocess/src/main/resources/application.yaml
 Feature version hiện tại:
 
 ```text
-gold-ue-sequence-feature-v1
+gold-ue-sequence-feature-v2
 ```
 
 Model input:
@@ -397,7 +397,7 @@ normalization rule
 mà vẫn giữ:
 
 ```text
-gold-ue-sequence-feature-v1
+gold-ue-sequence-feature-v2
 ```
 
 Nếu feature contract thay đổi thì cần:
@@ -425,7 +425,7 @@ Cấu trúc chính:
 ```json
 {
   "schema_version": "gold-sequence-v1",
-  "feature_version": "gold-ue-sequence-feature-v1",
+  "feature_version": "gold-ue-sequence-feature-v2",
   "sample_id": "...",
   "ue_key": "...",
   "imsi": "...",
