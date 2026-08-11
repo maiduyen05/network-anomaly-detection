@@ -936,7 +936,23 @@ public record GoldFeatureContract(
         * CATEGORICAL FEATURE 1
         * EVENT_RESULT
         * =============================================================
+        *
+        * Contract v2 giữ cả empty string như một category explicit.
+        *
+        * ""      -> 0
+        * abort   -> 1
+        * reject  -> 2
+        * success -> 3
+        * =============================================================
         */
+
+        Map<String, Integer> expectedEventResultVocabulary =
+                new LinkedHashMap<>();
+
+        expectedEventResultVocabulary.put("", 0);
+        expectedEventResultVocabulary.put("abort", 1);
+        expectedEventResultVocabulary.put("reject", 2);
+        expectedEventResultVocabulary.put("success", 3);
 
         requireCategoricalFeature(
                 contract,
@@ -944,11 +960,7 @@ public record GoldFeatureContract(
                 "event_result_code",
                 "eventResult",
                 "fixed_vocabulary_lookup",
-                Map.of(
-                        "abort", 1,
-                        "reject", 2,
-                        "success", 3
-                )
+                expectedEventResultVocabulary
         );
 
 

@@ -125,11 +125,13 @@ runtime/checkpoints/*
 runtime/savepoints/*
 runtime/logs/*
 runtime/producer/*
+runtime/flink/*
 
 !runtime/checkpoints/.gitkeep
 !runtime/savepoints/.gitkeep
 !runtime/logs/.gitkeep
 !runtime/producer/.gitkeep
+
 
 
 # ============================================================
