@@ -22,13 +22,19 @@ import java.util.Locale;
 /**
  * Chuẩn hóa EVENT_TIME về UTC ISO-8601.
  *
- * <p>Class hỗ trợ hai dạng timestamp:</p>
+ * <p>Class hỗ trợ ba dạng timestamp:</p>
  *
  * <ol>
+ *     <li>
+ *         Unix Epoch Milliseconds:
+ *         {@code 1719385235407}
+ *     </li>
+ *
  *     <li>
  *         Timestamp đã có UTC offset:
  *         {@code 2026-08-03T13:15:30+07:00}
  *     </li>
+ *
  *     <li>
  *         Timestamp local không có offset:
  *         {@code 2026-08-03 13:15:30}
@@ -36,10 +42,30 @@ import java.util.Locale;
  *     </li>
  * </ol>
  *
- * <p>Timestamp local được hiểu theo timezone cấu hình, ví dụ
- * Asia/Ho_Chi_Minh, sau đó chuyển sang UTC.</p>
+ * <p>
+ * Epoch milliseconds đã biểu diễn một thời điểm tuyệt đối nên
+ * không áp dụng source timezone.
+ * </p>
+ *
+ * <p>
+ * Timestamp local không có offset được hiểu theo timezone cấu hình,
+ * ví dụ Asia/Ho_Chi_Minh, sau đó chuyển sang UTC.
+ * </p>
  */
 public final class TimestampNormalizer implements Serializable {
+
+    /**
+     * Dataset hiện tại lưu EVENT_TIME dưới dạng Unix Epoch Milliseconds.
+     *
+     * Ví dụ:
+     *
+     * 1719385235407
+     *
+     * tương ứng:
+     *
+     * 2024-06-26T07:00:35.407Z
+     */
+    private static final int EPOCH_MILLIS_LENGTH = 13;
 
     /*
      * Formatter cho timestamp local:
@@ -105,24 +131,20 @@ public final class TimestampNormalizer implements Serializable {
              * Kiểm tra timezone ngay khi khởi tạo.
              *
              * Ví dụ hợp lệ:
+             *
              * Asia/Ho_Chi_Minh
              * UTC
              */
             ZoneId.of(sourceTimezone);
 
         } catch (DateTimeException exception) {
-            /*
-             * Timezone sai là lỗi cấu hình hệ thống.
-             */
+
             throw new IllegalArgumentException(
                     "Invalid sourceTimezone: " + sourceTimezone,
                     exception
             );
         }
 
-        /*
-         * Giữ lại giá trị cấu hình đã kiểm tra.
-         */
         this.sourceTimezone = sourceTimezone;
     }
 
@@ -130,7 +152,7 @@ public final class TimestampNormalizer implements Serializable {
      * Parse EVENT_TIME bắt buộc và chuyển về UTC ISO-8601.
      *
      * @param rawEventTime giá trị EVENT_TIME trong raw log
-     * @return timestamp UTC, ví dụ 2026-08-03T06:15:30Z
+     * @return timestamp UTC, ví dụ 2024-06-26T07:00:35.407Z
      * @throws BronzeDataException nếu timestamp thiếu hoặc sai format
      */
     public String normalizeRequiredToUtc(
@@ -139,8 +161,6 @@ public final class TimestampNormalizer implements Serializable {
 
         /*
          * EVENT_TIME là field bắt buộc.
-         *
-         * Khác với numeric field, timestamp rỗng không được giữ null.
          */
         if (rawEventTime == null || rawEventTime.isBlank()) {
             throw invalidTimestamp(
@@ -154,9 +174,47 @@ public final class TimestampNormalizer implements Serializable {
         String normalizedInput = rawEventTime.trim();
 
         /*
-         * Thử parse timestamp có offset trước.
+         * ==========================================================
+         * FORMAT 1 - UNIX EPOCH MILLISECONDS
+         * ==========================================================
+         *
+         * Dataset thực tế hiện tại lưu EVENT_TIME dạng:
+         *
+         * 1719385235407
+         *
+         * Đây là số milliseconds kể từ:
+         *
+         * 1970-01-01T00:00:00Z
+         *
+         * Epoch timestamp đã chứa thời điểm tuyệt đối,
+         * vì vậy không áp dụng sourceTimezone.
+         */
+        if (isEpochMilliseconds(normalizedInput)) {
+
+            try {
+                long epochMillis =
+                        Long.parseLong(normalizedInput);
+
+                return Instant
+                        .ofEpochMilli(epochMillis)
+                        .toString();
+
+            } catch (NumberFormatException
+                     | DateTimeException exception) {
+
+                throw invalidTimestamp(
+                        "EVENT_TIME has invalid epoch milliseconds"
+                );
+            }
+        }
+
+        /*
+         * ==========================================================
+         * FORMAT 2 - ISO TIMESTAMP CÓ OFFSET
+         * ==========================================================
          *
          * Ví dụ:
+         *
          * 2026-08-03T13:15:30+07:00
          */
         try {
@@ -166,29 +224,25 @@ public final class TimestampNormalizer implements Serializable {
                             DateTimeFormatter.ISO_OFFSET_DATE_TIME
                     );
 
-            /*
-             * toInstant() chuyển timestamp có offset về cùng một
-             * thời điểm tuyệt đối trong UTC.
-             *
-             * Instant.toString() xuất ISO-8601 với ký hiệu Z.
-             */
             return offsetDateTime
                     .toInstant()
                     .toString();
 
         } catch (DateTimeParseException ignored) {
             /*
-             * Không kết luận lỗi ngay.
-             *
-             * Input có thể là timestamp local không có offset,
-             * nên ta thử parser thứ hai ở bên dưới.
+             * Input có thể là local datetime,
+             * thử parser thứ ba bên dưới.
              */
         }
 
         /*
-         * Thử parse timestamp local.
+         * ==========================================================
+         * FORMAT 3 - LOCAL DATETIME
+         * ==========================================================
          *
          * Ví dụ:
+         *
+         * 2026-08-03 13:15:30
          * 2026-08-03 13:15:30.123
          */
         try {
@@ -198,21 +252,15 @@ public final class TimestampNormalizer implements Serializable {
                             LOCAL_TIMESTAMP_FORMATTER
                     );
 
-            /*
-             * Lấy quy tắc timezone từ application.yaml.
-             */
             ZoneRules zoneRules =
                     zoneId().getRules();
 
             /*
              * Một local timestamp có thể có:
              *
-             * - 1 offset: thời gian hợp lệ và không mơ hồ.
-             * - 0 offset: rơi vào DST gap, thời gian không tồn tại.
-             * - 2 offset: rơi vào DST overlap, thời gian bị mơ hồ.
-             *
-             * Asia/Ho_Chi_Minh hiện không có DST nhưng kiểm tra này làm
-             * code đúng nếu sau này đổi sang timezone khác.
+             * - 1 offset: hợp lệ.
+             * - 0 offset: DST gap.
+             * - 2 offset: DST overlap.
              */
             List<ZoneOffset> validOffsets =
                     zoneRules.getValidOffsets(
@@ -220,7 +268,7 @@ public final class TimestampNormalizer implements Serializable {
                     );
 
             /*
-             * Chỉ chấp nhận timestamp ánh xạ được tới đúng một offset.
+             * Chỉ chấp nhận timestamp ánh xạ tới đúng một offset.
              */
             if (validOffsets.size() != 1) {
                 throw invalidTimestamp(
@@ -229,28 +277,45 @@ public final class TimestampNormalizer implements Serializable {
                 );
             }
 
-            /*
-             * Chuyển LocalDateTime cùng offset vừa tìm được thành Instant.
-             */
             Instant instant =
                     localDateTime.toInstant(
                             validOffsets.get(0)
                     );
 
-            /*
-             * Trả kết quả UTC ISO-8601.
-             */
             return instant.toString();
 
         } catch (DateTimeParseException exception) {
-            /*
-             * Không đưa rawEventTime vào error message vì đó là dữ liệu
-             * nguồn và không cần thiết cho việc phân loại lỗi.
-             */
+
             throw invalidTimestamp(
                     "EVENT_TIME has invalid format"
             );
         }
+    }
+
+    /**
+     * Kiểm tra EVENT_TIME có phải Unix Epoch Milliseconds hay không.
+     *
+     * <p>
+     * Contract hiện tại chỉ nhận đúng 13 chữ số để tránh nhầm
+     * Unix Epoch Seconds 10 chữ số với Epoch Milliseconds.
+     * </p>
+     */
+    private boolean isEpochMilliseconds(String value) {
+
+        if (value.length() != EPOCH_MILLIS_LENGTH) {
+            return false;
+        }
+
+        for (int index = 0; index < value.length(); index++) {
+
+            if (!Character.isDigit(
+                    value.charAt(index)
+            )) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -270,16 +335,9 @@ public final class TimestampNormalizer implements Serializable {
      */
     private ZoneId zoneId() {
 
-        /*
-         * sourceZoneId sẽ null khi:
-         *
-         * - Object vừa được khởi tạo.
-         * - Object vừa được Flink deserialize trên TaskManager.
-         */
         if (sourceZoneId == null) {
-            sourceZoneId = ZoneId.of(
-                    sourceTimezone
-            );
+            sourceZoneId =
+                    ZoneId.of(sourceTimezone);
         }
 
         return sourceZoneId;

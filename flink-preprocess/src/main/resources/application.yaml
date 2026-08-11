@@ -167,6 +167,10 @@ silver:
       canonical-event-id: l_pdn_disconnect
       display-name: LTE PDN Disconnect
 
+    - alias: l_pdn_disconnect
+      canonical-event-id: l_pdn_disconnect
+      display-name: LTE PDN Disconnect
+
     - alias: l_service_request
       canonical-event-id: l_service_request
       display-name: LTE Service Request

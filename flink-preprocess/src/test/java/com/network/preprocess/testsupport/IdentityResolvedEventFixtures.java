@@ -37,6 +37,11 @@ public final class IdentityResolvedEventFixtures {
         );
 
         rawFields.put(
+                "SUB_TYPE",
+                "normal"
+        );
+
+        rawFields.put(
                 "IMSI",
                 imsi
         );

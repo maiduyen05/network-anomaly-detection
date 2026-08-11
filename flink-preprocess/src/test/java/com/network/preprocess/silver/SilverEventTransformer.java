@@ -72,6 +72,11 @@ class SilverEventTransformerTest {
         );
 
         assertEquals(
+                "normal",
+                result.getSilverEvent().subType()
+        );
+
+        assertEquals(
                 "Service Request",
                 result.getSilverEvent()
                         .display()

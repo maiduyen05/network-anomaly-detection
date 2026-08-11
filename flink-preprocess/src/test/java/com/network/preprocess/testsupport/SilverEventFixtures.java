@@ -71,7 +71,7 @@ public final class SilverEventFixtures {
                  * Trước đây fixture truyền "normal", gây lỗi:
                  * String cannot be converted to Integer.
                  */
-                0,
+                "normal",
 
                 // EVENT_TIME dạng ISO-8601 UTC.
                 eventTime,

@@ -187,8 +187,8 @@ public final class SilverEventTransformer
          * Không bổ sung các trường này vào BronzeEvent để tránh
          * thay đổi contract Bronze đã ổn định.
          */
-        Integer subType =
-                parseOptionalIntegerField(
+        String subType =
+                readOptionalRawField(
                         bronzeEvent,
                         "SUB_TYPE"
                 );
@@ -478,48 +478,6 @@ public final class SilverEventTransformer
         }
 
         return rawValue.trim();
-    }
-
-    /**
-     * Đọc numeric field tùy chọn từ Bronze rawFields
-     * và chuyển thành Integer.
-     *
-     * <p>SUB_TYPE hiện chưa có accessor riêng trong BronzeEvent,
-     * nên Silver đọc từ rawFields.</p>
-     *
-     * <p>Nếu giá trị tồn tại nhưng không phải số nguyên thì đây
-     * là dấu hiệu contract Bronze bị vi phạm. Không nên âm thầm
-     * chuyển thành null vì sẽ che giấu lỗi dữ liệu.</p>
-     */
-    private Integer parseOptionalIntegerField(
-            BronzeEvent bronzeEvent,
-            String fieldName
-    ) {
-        String rawValue =
-                readOptionalRawField(
-                        bronzeEvent,
-                        fieldName
-                );
-
-        if (rawValue == null) {
-            return null;
-        }
-
-        try {
-            return Integer.valueOf(rawValue);
-        } catch (NumberFormatException exception) {
-            /*
-             * Không ghi rawValue vào message để tránh đưa dữ liệu
-             * nguồn bất thường vào application log.
-             */
-            throw new IllegalStateException(
-                    "Bronze raw field "
-                            + fieldName
-                            + " must contain an integer; rawRecordId="
-                            + bronzeEvent.rawRecordId(),
-                    exception
-            );
-        }
     }
 
     /**

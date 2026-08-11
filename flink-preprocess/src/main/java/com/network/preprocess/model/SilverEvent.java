@@ -42,7 +42,17 @@ public record SilverEvent(
 
         Long durationMs,
         Integer requestRetries,
-        Integer subType,
+
+        /*
+         * SUB_TYPE là categorical/text field trong raw dataset.
+         *
+         * Ví dụ dữ liệu thực tế:
+         *
+         * normal
+         *
+         * Vì vậy không được ép sang Integer.
+         */
+        String subType,
 
         String eventTime,
         String reportSide,
@@ -66,6 +76,7 @@ public record SilverEvent(
 ) implements Serializable {
 
     public SilverEvent {
+
         Objects.requireNonNull(
                 schemaVersion,
                 "schemaVersion must not be null"
@@ -121,24 +132,20 @@ public record SilverEvent(
                 "source must not be null"
         );
 
-
         /*
-         * Lưu một LinkedHashMap mutable ở bên trong để tương thích
-         * với cơ chế copy/serialization của Flink và Kryo.
+         * Lưu LinkedHashMap mutable bên trong để tương thích
+         * với Flink/Kryo.
          */
         rawFields = rawFields == null
                 ? new LinkedHashMap<>()
                 : new LinkedHashMap<>(rawFields);
     }
 
-        /**
+    /**
      * Không cho code bên ngoài thay đổi rawFields.
-     *
-     * Map bên trong vẫn là LinkedHashMap mutable để Flink có thể
-     * serialize và copy khi shuffle, checkpoint hoặc chạy test harness.
      */
-        @Override
-        public Map<String, String> rawFields() {
-                return Collections.unmodifiableMap(rawFields);
-        }
+    @Override
+    public Map<String, String> rawFields() {
+        return Collections.unmodifiableMap(rawFields);
     }
+}
