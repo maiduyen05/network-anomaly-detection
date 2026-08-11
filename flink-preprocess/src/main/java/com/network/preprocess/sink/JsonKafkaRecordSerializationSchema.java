@@ -66,7 +66,7 @@ public final class JsonKafkaRecordSerializationSchema<T>
             return new ProducerRecord<>(
                     topic,
                     null,
-                    timestamp,
+                    null,
                     keyBytes,
                     valueBytes
             );
