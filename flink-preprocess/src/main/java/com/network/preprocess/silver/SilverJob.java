@@ -15,6 +15,7 @@ import com.network.preprocess.silver.identity.UeIdentityResolver;
 import com.network.preprocess.sink.SilverKafkaSinks;
 import com.network.preprocess.source.BronzeEventKafkaSource;
 
+import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream
@@ -169,6 +170,18 @@ public final class SilverJob {
         FlinkEnvironmentConfigurator.configure(
                 env,
                 config
+        );
+
+        /*
+        * Silver có keyed state cho deduplication và TTL.
+        *
+        * Dùng RocksDB để keyed state không chiếm toàn bộ Java heap
+        * khi Silver chạy đồng thời với Bronze và Gold.
+        *
+        * true = incremental checkpoint.
+        */
+        env.setStateBackend(
+                new EmbeddedRocksDBStateBackend(true)
         );
 
 

@@ -6,8 +6,9 @@
 # ============================================================
 
 job:
-  # Có ba Kafka partition nên đặt source parallelism bằng 3.
-  parallelism: 3
+  # Máy local chạy đồng thời Bronze + Silver + Gold.
+  # Mỗi job parallelism = 2 => tổng cộng cần 6 task slots.  
+  parallelism: 2
 
   # Tạo checkpoint mỗi 60 giây.
   checkpoint-interval-ms: 60000

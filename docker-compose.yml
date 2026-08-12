@@ -162,88 +162,51 @@ services:
   # =========================================================
   flink-taskmanager:
     image: ${FLINK_IMAGE:-flink:1.20.1-scala_2.12-java17}
-    container_name: a-flink-taskmanager
+
+    # Không đặt container_name để service có thể scale thành
+    # nhiều TaskManager độc lập.
     restart: unless-stopped
 
     command: taskmanager
 
     environment:
+      # Giảm native-memory fragmentation khi chạy RocksDB.
+      MALLOC_ARENA_MAX: "1"
+
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.bind-host: 0.0.0.0
-        taskmanager.host: flink-taskmanager
 
-        taskmanager.numberOfTaskSlots: ${FLINK_TASK_SLOTS:-3}
-        taskmanager.memory.process.size: 3g
-        taskmanager.memory.managed.size: 768m
+        # Mỗi TaskManager có 3 slots.
+        # Scale 2 replicas => tổng 6 slots.
+        taskmanager.numberOfTaskSlots: 3
+
+        # Giữ tổng memory mỗi TaskManager ở mức phù hợp
+        # với máy ~8 GB RAM.
+        taskmanager.memory.process.size: 2304m
+
+        # Managed memory dùng cho RocksDB và runtime.
+        taskmanager.memory.managed.size: 512m
 
         state.backend.rocksdb.memory.managed: true
 
-        parallelism.default: ${FLINK_PARALLELISM:-3}
+        parallelism.default: 2
 
         state.checkpoints.dir: file:///opt/flink/runtime/checkpoints
         state.savepoints.dir: file:///opt/flink/runtime/savepoints
 
     volumes:
-    - ./runtime/flink/usrlib:/opt/flink/usrlib:ro
-    - ./config:/opt/project/config:ro
-    - ./schemas:/opt/project/schemas:ro
+      - ./runtime/flink/usrlib:/opt/flink/usrlib:ro
+      - ./config:/opt/project/config:ro
+      - ./schemas:/opt/project/schemas:ro
 
-    # Phải dùng cùng checkpoint/savepoint directory với JobManager.
-    - ./runtime/flink/checkpoints:/opt/flink/runtime/checkpoints
-    - ./runtime/flink/savepoints:/opt/flink/runtime/savepoints
+      - ./runtime/flink/checkpoints:/opt/flink/runtime/checkpoints
+      - ./runtime/flink/savepoints:/opt/flink/runtime/savepoints
 
-    - ./runtime/flink/logs/taskmanager:/opt/flink/log
+      - ./runtime/flink/logs/taskmanager:/opt/flink/log
 
     depends_on:
       - flink-jobmanager
-
-    networks:
-      - a-network
-
-  # =========================================================
-  # Inference service
-  #
-  # Chỉ chạy khi dùng:
-  # docker compose --profile apps up -d
-  # =========================================================
-  inference-service:
-    profiles:
-      - apps
-
-    build:
-      context: ./inference-service
-      dockerfile: Dockerfile
-
-    image: project-a/inference-service:local
-    container_name: a-inference-service
-    restart: unless-stopped
-
-    env_file:
-      - .env
-
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_INPUT_TOPIC_KEY: processed_network_events
-      KAFKA_OUTPUT_TOPIC_KEY: anomaly_predictions
-
-      TOPICS_CONFIG_PATH: /opt/project/config/kafka/topics.yaml
-      PROCESSED_SCHEMA_PATH: /opt/project/schemas/processed-network-events.schema.json
-      PREDICTION_SCHEMA_PATH: /opt/project/schemas/anomaly-predictions.schema.json
-
-      MODEL_PATH: /models/model.onnx
-
-    ports:
-      - "${INFERENCE_PORT:-8000}:8000"
-
-    volumes:
-      - ./config:/opt/project/config:ro
-      - ./schemas:/opt/project/schemas:ro
-      - ./inference-service/models:/models:ro
-
-    depends_on:
-      kafka:
-        condition: service_healthy
 
     networks:
       - a-network
