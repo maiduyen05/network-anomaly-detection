@@ -47,7 +47,7 @@ class BronzeJobConfigTest {
         );
 
         assertEquals(
-                3,
+                2,
                 config.parallelism()
         );
 

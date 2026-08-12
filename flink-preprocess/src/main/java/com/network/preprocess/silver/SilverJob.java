@@ -14,9 +14,9 @@ import com.network.preprocess.silver.identity
 import com.network.preprocess.silver.identity.UeIdentityResolver;
 import com.network.preprocess.sink.SilverKafkaSinks;
 import com.network.preprocess.source.BronzeEventKafkaSource;
+import com.network.preprocess.silver.time.BronzeWatermarkStrategyFactory;
 
 import org.apache.flink.contrib.streaming.state.EmbeddedRocksDBStateBackend;
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream
         .SingleOutputStreamOperator;
@@ -218,26 +218,35 @@ public final class SilverJob {
 
 
         /*
-         * =========================================================
-         * BƯỚC 2
-         * BRONZE KAFKA SOURCE
-         * =========================================================
-         *
-         * Source chưa gắn watermark ở đây.
-         *
-         * Watermark được gắn sau khi event đã:
-         *
-         * - resolve identity;
-         * - normalize;
-         * - trở thành SilverEvent hợp lệ.
-         */
+        * =========================================================
+        * BƯỚC 2
+        * BRONZE KAFKA SOURCE + EVENT-TIME WATERMARK
+        * =========================================================
+        *
+        * Timestamp lấy từ BronzeEvent.eventTime.
+        *
+        * Watermark được tạo ngay tại Kafka source để giữ
+        * khả năng theo dõi event-time theo Kafka partition.
+        */
 
         DataStream<BronzeEvent> bronzeEvents =
                 env.fromSource(
                                 BronzeEventKafkaSource.create(
                                         config
                                 ),
-                                WatermarkStrategy.noWatermarks(),
+
+                                /*
+                                * Timestamp + watermark được tạo ngay
+                                * tại Kafka source.
+                                *
+                                * KafkaSource nhờ đó có thể duy trì
+                                * watermark theo từng Kafka split/partition.
+                                */
+                                BronzeWatermarkStrategyFactory.create(
+                                        config.watermarkMaxOutOfOrdernessMs(),
+                                        config.watermarkIdlenessMs()
+                                ),
+
                                 "silver-bronze-event-source"
                         )
                         .uid(
@@ -320,16 +329,14 @@ public final class SilverJob {
         /*
          * =========================================================
          * BƯỚC 5
-         * DEDUPLICATE + WATERMARK + LATE ROUTING
+         * DEDUPLICATE  + LATE ROUTING
          * =========================================================
          */
 
         SilverStreamBuilder.Result streamResult =
                 SilverStreamBuilder.build(
                         normalizedEvents,
-                        config.stateTtlMs(),
-                        config.watermarkMaxOutOfOrdernessMs(),
-                        config.watermarkIdlenessMs()
+                        config.stateTtlMs()
                 );
 
 

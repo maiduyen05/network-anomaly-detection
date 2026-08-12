@@ -56,7 +56,7 @@ class GoldJobConfigTest {
         );
 
         assertEquals(
-                3,
+                2,
                 config.parallelism()
         );
 

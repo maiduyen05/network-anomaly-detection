@@ -183,7 +183,7 @@ public final class BronzeTransformer implements Serializable {
                     envelope.rawRecordId(),
 
                     trimToNull(fields.get("EVENT_ID")),
-                    trimToNull(fields.get("EVENT_RESULT")),
+                    trimPreserveEmpty(fields.get("EVENT_RESULT")),
                     durationMs,
                     requestRetries,
                     pagingAttempts,
@@ -320,4 +320,12 @@ public final class BronzeTransformer implements Serializable {
 
         return value.trim();
     }
+
+    private String trimPreserveEmpty(String value) {
+        if (value == null) {
+                return null;
+        }
+
+        return value.trim();
+        }
 }
