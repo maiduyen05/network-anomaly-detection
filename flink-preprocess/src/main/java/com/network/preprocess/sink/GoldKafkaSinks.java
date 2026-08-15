@@ -6,6 +6,7 @@ import com.network.preprocess.model.GoldSequenceSample;
 import com.network.preprocess.model.InvalidGoldFeatureRecord;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.kafka.sink.KafkaSink;
+import org.apache.kafka.clients.producer.ProducerConfig;
 
 import java.util.Objects;
 
@@ -121,6 +122,26 @@ public final class GoldKafkaSinks {
                  */
                 .setBootstrapServers(
                         bootstrapServers
+                )
+
+                .setProperty(
+                        ProducerConfig.TRANSACTION_TIMEOUT_CONFIG,
+                        "900000"
+                )
+
+                .setProperty(
+                        ProducerConfig.MAX_BLOCK_MS_CONFIG,
+                        "180000"
+                )
+
+                .setProperty(
+                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                        "60000"
+                )
+
+                .setProperty(
+                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG,
+                        "300000"
                 )
 
                 /*

@@ -63,6 +63,16 @@ public final class RawEventKafkaSource {
                         ConsumerConfig.ISOLATION_LEVEL_CONFIG,
                         "read_committed"
                 )
+
+                .setProperty(
+                        ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG,
+                        "180000"
+                )
+
+                .setProperty(
+                        ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                        "60000"
+                )
                 .setProperty(
                         "client.id.prefix",
                         "flink-bronze-source-v1"

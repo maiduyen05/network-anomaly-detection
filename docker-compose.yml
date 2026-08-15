@@ -129,6 +129,9 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         jobmanager.bind-host: 0.0.0.0
         jobmanager.memory.process.size: 768m
+        restart-strategy.type: fixed-delay
+        restart-strategy.fixed-delay.attempts: 20
+        restart-strategy.fixed-delay.delay: 10 s
         rest.address: 0.0.0.0
         rest.bind-address: 0.0.0.0
         parallelism.default: ${FLINK_PARALLELISM:-1}

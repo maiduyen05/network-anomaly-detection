@@ -146,9 +146,11 @@ nifi/database_repository/
 # ============================================================
 
 data/raw/*
+data/export/*
 
 # Smoke data được generate lại bởi script.
 data/smoke-gold/*
+
 
 
 # ============================================================

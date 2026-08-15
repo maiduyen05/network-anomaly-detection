@@ -91,6 +91,16 @@ public final class SilverEventKafkaSource {
                         "read_committed"
                 )
 
+                .setProperty(
+                        ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG,
+                        "180000"
+                )
+
+                .setProperty(
+                        ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG,
+                        "60000"
+                )
+
                 /*
                  * Dùng để nhận diện Gold consumer trên Kafka.
                  */

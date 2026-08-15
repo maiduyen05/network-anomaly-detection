@@ -2,49 +2,69 @@ package com.network.preprocess.sink;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind
-        .PropertyNamingStrategies;
-import org.apache.flink.connector.kafka.sink
-        .KafkaRecordSerializationSchema;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Chuyển 1 object java thành kafka message (Kafka ProducerRecord) trước khi ghi ra topic Kafka
- * Biến object Java thành JSON snake_case, tạo kafka key rồi đóng gói thành ProducerRecord để Kafka Sink gửi đi
- * 
- * KafkaRecordSerializationSchema: interface của Flink Kafka Sink
- * @param <T> kiểu event cần gửi Kafka
+ * Serialize Java object thành Kafka ProducerRecord.
+ *
+ * Hỗ trợ:
+ * - JSON snake_case;
+ * - Kafka key;
+ * - optional explicit Kafka partition.
+ *
+ * Nếu partitionExtractor = null thì Kafka producer tự chọn partition.
  */
 public final class JsonKafkaRecordSerializationSchema<T>
-        implements KafkaRecordSerializationSchema<T> {   
+        implements KafkaRecordSerializationSchema<T> {
 
-    /**
-     * Hàm lấy Kafka key phải Serializable để Flink có thể chuyển
-     * schema từ JobManager sang TaskManager.
-     */
     @FunctionalInterface
     public interface KeyExtractor<T> extends Serializable {
         String extract(T value);
     }
 
+    @FunctionalInterface
+    public interface PartitionExtractor<T> extends Serializable {
+        Integer extract(T value);
+    }
+
     private final String topic;
     private final KeyExtractor<T> keyExtractor;
+    private final PartitionExtractor<T> partitionExtractor;
 
-    /*
-     * ObjectMapper không cần được Flink serialize.
-     * Nó được tạo lại trên TaskManager khi dùng lần đầu.
-     */
     private transient ObjectMapper objectMapper;
 
+    /**
+     * Constructor cũ:
+     * Kafka tự chọn partition.
+     */
     public JsonKafkaRecordSerializationSchema(
             String topic,
             KeyExtractor<T> keyExtractor
     ) {
+        this(
+                topic,
+                keyExtractor,
+                null
+        );
+    }
+
+    /**
+     * Constructor mới:
+     * caller có thể chỉ định Kafka partition.
+     */
+    public JsonKafkaRecordSerializationSchema(
+            String topic,
+            KeyExtractor<T> keyExtractor,
+            PartitionExtractor<T> partitionExtractor
+    ) {
         this.topic = topic;
         this.keyExtractor = keyExtractor;
+        this.partitionExtractor = partitionExtractor;
     }
 
     @Override
@@ -54,28 +74,48 @@ public final class JsonKafkaRecordSerializationSchema<T>
             Long timestamp
     ) {
         try {
-            String key = keyExtractor.extract(element);
+            String key = keyExtractor.extract(
+                    element
+            );
 
-            byte[] keyBytes = key == null
-                    ? null
-                    : key.getBytes(StandardCharsets.UTF_8);
+            byte[] keyBytes =
+                    key == null
+                            ? null
+                            : key.getBytes(
+                                    StandardCharsets.UTF_8
+                            );
 
             byte[] valueBytes =
-                    mapper().writeValueAsBytes(element);
+                    mapper().writeValueAsBytes(
+                            element
+                    );
+
+            Integer partition = null;
+
+            if (partitionExtractor != null) {
+                partition =
+                        partitionExtractor.extract(
+                                element
+                        );
+
+                if (partition != null
+                        && partition < 0) {
+                    throw new IllegalStateException(
+                            "Kafka partition must not be negative: "
+                                    + partition
+                    );
+                }
+            }
 
             return new ProducerRecord<>(
                     topic,
-                    null,
+                    partition,
                     null,
                     keyBytes,
                     valueBytes
             );
 
         } catch (JsonProcessingException exception) {
-            /*
-             * Đây là lỗi serialize object nội bộ do code tạo ra.
-             * Không route sang data DLQ vì input đã qua validation.
-             */
             throw new IllegalStateException(
                     "Could not serialize Kafka output JSON",
                     exception
@@ -85,15 +125,14 @@ public final class JsonKafkaRecordSerializationSchema<T>
 
     private ObjectMapper mapper() {
         if (objectMapper == null) {
-            objectMapper = new ObjectMapper();
+            objectMapper =
+                    new ObjectMapper();
 
-            /*
-             * schemaVersion -> schema_version
-             * rawRecordId   -> raw_record_id
-             */
-            objectMapper.setPropertyNamingStrategy(
-                    PropertyNamingStrategies.SNAKE_CASE
-            );
+            objectMapper
+                    .setPropertyNamingStrategy(
+                            PropertyNamingStrategies
+                                    .SNAKE_CASE
+                    );
         }
 
         return objectMapper;
