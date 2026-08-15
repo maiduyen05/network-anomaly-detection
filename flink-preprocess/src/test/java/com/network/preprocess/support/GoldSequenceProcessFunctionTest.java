@@ -142,8 +142,14 @@ class GoldSequenceProcessFunctionTest {
     }
 
     /**
-     * Arrival order có thể khác event-time order.
-     * Output vẫn phải deterministic theo eventTime + sourceOrderKey.
+     * Arrival order có thể khác event-time order miễn là độ đảo vẫn nằm
+     * trong per-UE reorder tolerance.
+     *
+     * <p>
+     * 32 event ở đây cách nhau 500 ms, nên toàn bộ dải thời gian chỉ
+     * khoảng 15.5 giây. Ta cố ý gửi theo thứ tự ngược 32 -> 1 để kiểm tra
+     * Gold vẫn sort deterministic theo eventTime + sourceOrderKey.
+     * </p>
      */
     @Test
     void shouldOrderEventsByEventTimePerUe()
@@ -162,7 +168,13 @@ class GoldSequenceProcessFunctionTest {
 
                 processEvent(
                         harness,
-                        event(index)
+                        eventForUe(
+                                "452040000000001",
+                                index,
+                                BASE_TIME.plusMillis(
+                                        index * 500L
+                                )
+                        )
                 );
             }
 
@@ -250,6 +262,67 @@ class GoldSequenceProcessFunctionTest {
             assertTrue(
                     lateOutput == null
                             || lateOutput.isEmpty()
+            );
+
+        } finally {
+            harness.close();
+        }
+    }
+
+    /**
+     * Trong cùng một UE, event vượt quá reorder tolerance phải được
+     * xem là too-late ngay cả khi UE chưa idle.
+     *
+     * <p>
+     * maxSeen = 100s, tolerance = 30s => finalizedThrough = 70s.
+     * Event 60s tới sau đó đã nằm sau boundary và không thể chèn ngược.
+     * </p>
+     */
+    @Test
+    void shouldRouteEventBeyondPerUeReorderTolerance()
+            throws Exception {
+
+        KeyedOneInputStreamOperatorTestHarness<
+                String,
+                GoldSequenceEvent,
+                GoldSequenceWindow> harness =
+                createHarness();
+
+        try {
+            processEvent(
+                    harness,
+                    eventForUe(
+                            "ue-A",
+                            100,
+                            BASE_TIME.plusSeconds(100)
+                    )
+            );
+
+            GoldSequenceEvent tooOld =
+                    eventForUe(
+                            "ue-A",
+                            60,
+                            BASE_TIME.plusSeconds(60)
+                    );
+
+            processEvent(
+                    harness,
+                    tooOld
+            );
+
+            ConcurrentLinkedQueue<
+                    StreamRecord<GoldSequenceEvent>> lateOutput =
+                    harness.getSideOutput(
+                            GoldSequenceProcessFunction
+                                    .TOO_LATE_EVENT_TAG
+                    );
+
+            assertEquals(1, lateOutput.size());
+            assertEquals(
+                    tooOld.sourceOrderKey(),
+                    lateOutput.peek()
+                            .getValue()
+                            .sourceOrderKey()
             );
 
         } finally {
