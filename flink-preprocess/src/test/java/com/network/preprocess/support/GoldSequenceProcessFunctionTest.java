@@ -3,13 +3,9 @@ package com.network.preprocess.gold;
 import com.network.preprocess.model.GoldSequenceEvent;
 import com.network.preprocess.model.GoldSequenceWindow;
 import org.apache.flink.api.common.typeinfo.Types;
-import org.apache.flink.streaming.api.operators
-        .KeyedProcessOperator;
-import org.apache.flink.streaming.api.watermark.Watermark;
-import org.apache.flink.streaming.runtime.streamrecord
-        .StreamRecord;
-import org.apache.flink.streaming.util
-        .KeyedOneInputStreamOperatorTestHarness;
+import org.apache.flink.streaming.api.operators.KeyedProcessOperator;
+import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.streaming.util.KeyedOneInputStreamOperatorTestHarness;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -21,14 +17,25 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * Contract test cho Gold sequence ordering.
+ *
+ * <p>
+ * Các test cố ý không dựa vào Kafka/source watermark nữa.
+ * Gold ordering được quyết định theo timeline của từng ueKey.
+ * </p>
+ */
 class GoldSequenceProcessFunctionTest {
 
     private static final Instant BASE_TIME =
             Instant.parse("2026-07-08T10:00:00Z");
 
-    /**
-     * Chưa đủ 32 event thì không được phát sample.
-     */
+    private static final long TEST_REORDER_MS =
+            30_000L;
+
+    private static final long TEST_IDLE_FLUSH_MS =
+            60_000L;
+
     @Test
     void shouldNotEmitWindowWhenOnlyThirtyOneEventsExist()
             throws Exception {
@@ -40,29 +47,21 @@ class GoldSequenceProcessFunctionTest {
                 createHarness();
 
         try {
-            processRange(
-                    harness,
-                    1,
-                    31
-            );
+            processRange(harness, 1, 31);
 
-            advanceWatermark(
-                    harness,
-                    31
-            );
+            /*
+             * UE idle -> flush tail. Vẫn chỉ có 31 event,
+             * nên chưa đủ tạo sequence length 32.
+             */
+            flushIdle(harness);
 
-            assertTrue(
-                    mainOutput(harness).isEmpty()
-            );
+            assertTrue(mainOutput(harness).isEmpty());
 
         } finally {
             harness.close();
         }
     }
 
-    /**
-     * Đúng 32 event thì phát đúng một window.
-     */
     @Test
     void shouldEmitOneWindowWhenThirtyTwoEventsExist()
             throws Exception {
@@ -74,50 +73,26 @@ class GoldSequenceProcessFunctionTest {
                 createHarness();
 
         try {
-            processRange(
-                    harness,
-                    1,
-                    32
-            );
-
-            advanceWatermark(
-                    harness,
-                    32
-            );
+            processRange(harness, 1, 32);
+            flushIdle(harness);
 
             List<GoldSequenceWindow> output =
                     mainOutput(harness);
 
-            assertEquals(
-                    1,
-                    output.size()
-            );
+            assertEquals(1, output.size());
 
             GoldSequenceWindow window =
                     output.get(0);
 
-            assertEquals(
-                    32,
-                    window.events().size()
-            );
-
-            assertEquals(
-                    8,
-                    window.stride()
-            );
-
+            assertEquals(32, window.events().size());
+            assertEquals(8, window.stride());
             assertEquals(
                     "raw-record-1",
-                    window.events()
-                            .get(0)
-                            .sourceOrderKey()
+                    window.events().get(0).sourceOrderKey()
             );
-
             assertEquals(
                     "raw-record-32",
-                    window.events()
-                            .get(31)
-                            .sourceOrderKey()
+                    window.events().get(31).sourceOrderKey()
             );
 
         } finally {
@@ -125,14 +100,6 @@ class GoldSequenceProcessFunctionTest {
         }
     }
 
-    /**
-     * Với 40 event và stride 8 phải phát:
-     *
-     * <pre>
-     * window 1 = event 1..32
-     * window 2 = event 9..40
-     * </pre>
-     */
     @Test
     void shouldEmitSecondWindowAfterEightMoreEvents()
             throws Exception {
@@ -144,57 +111,29 @@ class GoldSequenceProcessFunctionTest {
                 createHarness();
 
         try {
-            processRange(
-                    harness,
-                    1,
-                    40
-            );
-
-            advanceWatermark(
-                    harness,
-                    40
-            );
+            processRange(harness, 1, 40);
+            flushIdle(harness);
 
             List<GoldSequenceWindow> output =
                     mainOutput(harness);
 
-            assertEquals(
-                    2,
-                    output.size()
-            );
-
-            GoldSequenceWindow firstWindow =
-                    output.get(0);
-
-            GoldSequenceWindow secondWindow =
-                    output.get(1);
+            assertEquals(2, output.size());
 
             assertEquals(
                     "raw-record-1",
-                    firstWindow.events()
-                            .get(0)
-                            .sourceOrderKey()
+                    output.get(0).events().get(0).sourceOrderKey()
             );
-
             assertEquals(
                     "raw-record-32",
-                    firstWindow.events()
-                            .get(31)
-                            .sourceOrderKey()
+                    output.get(0).events().get(31).sourceOrderKey()
             );
-
             assertEquals(
                     "raw-record-9",
-                    secondWindow.events()
-                            .get(0)
-                            .sourceOrderKey()
+                    output.get(1).events().get(0).sourceOrderKey()
             );
-
             assertEquals(
                     "raw-record-40",
-                    secondWindow.events()
-                            .get(31)
-                            .sourceOrderKey()
+                    output.get(1).events().get(31).sourceOrderKey()
             );
 
         } finally {
@@ -204,12 +143,10 @@ class GoldSequenceProcessFunctionTest {
 
     /**
      * Arrival order có thể khác event-time order.
-     *
-     * <p>Test gửi event theo thứ tự ngược, nhưng output vẫn phải
-     * được sắp từ event 1 đến event 32.</p>
+     * Output vẫn phải deterministic theo eventTime + sourceOrderKey.
      */
     @Test
-    void shouldOrderEventsByEventTime()
+    void shouldOrderEventsByEventTimePerUe()
             throws Exception {
 
         KeyedOneInputStreamOperatorTestHarness<
@@ -229,18 +166,12 @@ class GoldSequenceProcessFunctionTest {
                 );
             }
 
-            advanceWatermark(
-                    harness,
-                    32
-            );
+            flushIdle(harness);
 
             List<GoldSequenceWindow> output =
                     mainOutput(harness);
 
-            assertEquals(
-                    1,
-                    output.size()
-            );
+            assertEquals(1, output.size());
 
             List<GoldSequenceEvent> events =
                     output.get(0).events();
@@ -249,7 +180,6 @@ class GoldSequenceProcessFunctionTest {
                     "raw-record-1",
                     events.get(0).sourceOrderKey()
             );
-
             assertEquals(
                     "raw-record-32",
                     events.get(31).sourceOrderKey()
@@ -275,10 +205,63 @@ class GoldSequenceProcessFunctionTest {
     }
 
     /**
-     * Event có eventTime nhỏ hơn watermark phải đi side output.
+     * Một UE có timestamp tiến xa không được làm event của UE khác late.
+     * Đây là regression test cho lỗi production đã quan sát:
+     * Silver Kafka partition chứa nhiều UE với timeline khác nhau.
      */
     @Test
-    void shouldRouteTooLateEventToSideOutput()
+    void shouldKeepUeTimelinesIndependent()
+            throws Exception {
+
+        KeyedOneInputStreamOperatorTestHarness<
+                String,
+                GoldSequenceEvent,
+                GoldSequenceWindow> harness =
+                createHarness();
+
+        try {
+            GoldSequenceEvent farAheadUeA =
+                    eventForUe(
+                            "ue-A",
+                            1,
+                            BASE_TIME.plusSeconds(600)
+                    );
+
+            GoldSequenceEvent olderButValidUeB =
+                    eventForUe(
+                            "ue-B",
+                            2,
+                            BASE_TIME.plusSeconds(10)
+                    );
+
+            processEvent(harness, farAheadUeA);
+            processEvent(harness, olderButValidUeB);
+
+            ConcurrentLinkedQueue<
+                    StreamRecord<GoldSequenceEvent>> lateOutput =
+                    harness.getSideOutput(
+                            GoldSequenceProcessFunction
+                                    .TOO_LATE_EVENT_TAG
+                    );
+
+            /*
+             * UE-B không được bị loại chỉ vì UE-A đang ở +10 phút.
+             */
+            assertTrue(
+                    lateOutput == null
+                            || lateOutput.isEmpty()
+            );
+
+        } finally {
+            harness.close();
+        }
+    }
+
+    /**
+     * Event chỉ được xem là late khi chính UE đã finalize qua timestamp đó.
+     */
+    @Test
+    void shouldRouteEventLateForSameUeAfterIdleFinalization()
             throws Exception {
 
         KeyedOneInputStreamOperatorTestHarness<
@@ -289,38 +272,50 @@ class GoldSequenceProcessFunctionTest {
 
         try {
             /*
-             * Đưa watermark tới giây thứ 10.
-             */
-            advanceWatermark(
-                    harness,
-                    10
-            );
-
-            /*
-             * Event ở giây thứ 5 đến sau watermark nên đã quá trễ.
+             * UE hiện tại đã thấy event ở giây 100.
              */
             processEvent(
                     harness,
-                    event(5)
+                    eventForUe(
+                            "ue-A",
+                            100,
+                            BASE_TIME.plusSeconds(100)
+                    )
+            );
+
+            /*
+             * Sau 60 giây processing-time không có event mới,
+             * Gold flush toàn bộ tail và finalize UE tới giây 100.
+             */
+            flushIdle(harness);
+
+            /*
+             * Event giây 50 đến sau khi cùng UE đã finalized tới 100.
+             * Đây mới là too-late thực sự.
+             */
+            GoldSequenceEvent lateEvent =
+                    eventForUe(
+                            "ue-A",
+                            50,
+                            BASE_TIME.plusSeconds(50)
+                    );
+
+            processEvent(
+                    harness,
+                    lateEvent
             );
 
             ConcurrentLinkedQueue<
-                    StreamRecord<GoldSequenceEvent>>
-                    lateOutput =
+                    StreamRecord<GoldSequenceEvent>> lateOutput =
                     harness.getSideOutput(
                             GoldSequenceProcessFunction
                                     .TOO_LATE_EVENT_TAG
                     );
 
+            assertEquals(1, lateOutput.size());
             assertEquals(
-                    1,
-                    lateOutput.size()
-            );
-
-            assertEquals(
-                    "raw-record-5",
-                    lateOutput
-                            .peek()
+                    lateEvent.sourceOrderKey(),
+                    lateOutput.peek()
                             .getValue()
                             .sourceOrderKey()
             );
@@ -341,25 +336,17 @@ class GoldSequenceProcessFunctionTest {
                         32,
                         8,
                         86_400_000L,
-
-                        /*
-                         * Phiên bản schema của GoldSequenceWindow.
-                         */
                         "gold-sequence-v1",
-
-                        /*
-                         * Phiên bản feature contract dùng bởi model.
-                         */
-                        "gold-ue-sequence-feature-v2"
+                        "gold-ue-sequence-feature-v2",
+                        TEST_REORDER_MS,
+                        TEST_IDLE_FLUSH_MS
                 );
 
         KeyedProcessOperator<
                 String,
                 GoldSequenceEvent,
                 GoldSequenceWindow> operator =
-                new KeyedProcessOperator<>(
-                        function
-                );
+                new KeyedProcessOperator<>(function);
 
         KeyedOneInputStreamOperatorTestHarness<
                 String,
@@ -372,6 +359,7 @@ class GoldSequenceProcessFunctionTest {
                 );
 
         harness.open();
+        harness.setProcessingTime(0L);
 
         return harness;
     }
@@ -412,29 +400,22 @@ class GoldSequenceProcessFunctionTest {
         );
     }
 
-    private static void advanceWatermark(
+    /**
+     * Tất cả event trong test được nhận tại processing-time 0,
+     * nên timer idle mới nhất fire tại 60_000 ms.
+     */
+    private static void flushIdle(
             KeyedOneInputStreamOperatorTestHarness<
                     String,
                     GoldSequenceEvent,
-                    GoldSequenceWindow> harness,
-            int second
+                    GoldSequenceWindow> harness
     ) throws Exception {
 
-        harness.processWatermark(
-                new Watermark(
-                        BASE_TIME
-                                .plusSeconds(second)
-                                .toEpochMilli()
-                )
+        harness.setProcessingTime(
+                TEST_IDLE_FLUSH_MS
         );
     }
 
-    /**
-     * Chỉ lấy StreamRecord chứa GoldSequenceWindow.
-     *
-     * <p>Queue output còn có thể chứa Watermark, vì vậy không được
-     * cast trực tiếp tất cả phần tử.</p>
-     */
     private static List<GoldSequenceWindow> mainOutput(
             KeyedOneInputStreamOperatorTestHarness<
                     String,
@@ -462,55 +443,44 @@ class GoldSequenceProcessFunctionTest {
     private static GoldSequenceEvent event(
             int index
     ) {
+        return eventForUe(
+                "452040000000001",
+                index,
+                BASE_TIME.plusSeconds(index)
+        );
+    }
+
+    private static GoldSequenceEvent eventForUe(
+            String ueKey,
+            int index,
+            Instant eventTime
+    ) {
         return new GoldSequenceEvent(
-        "452040000000001",
-        "452040000000001",
-
-        "l_service_request",
-
-        /*
-         * Field compatibility cũ.
-         * l_service_request có ID 8 theo contract.
-         */
-        8,
-
-        "success",
-        1,
-
-        /*
-         * Cause rỗng là category hợp lệ, ID 0.
-         */
-        "",
-        "",
-
-        /*
-         * Numeric source.
-         */
-        100L + index,
-        index % 3,
-
-        BASE_TIME.plusSeconds(index),
-
-        Map.of(
-                "CAUSE_CODE", "",
-                "SUB_CAUSE_CODE", "",
-                "REQUEST_RETRIES",
-                Integer.toString(index % 3)
-        ),
-
-        Map.of(
-                "EVENT_ID",
+                ueKey,
+                ueKey,
                 "l_service_request",
-                "EVENT_RESULT",
-                "success"
-        ),
-
-        Map.of(
-                "supported",
-                "true"
-        ),
-
-        "raw-record-" + index
+                8,
+                "success",
+                1,
+                "",
+                "",
+                100L + index,
+                index % 3,
+                eventTime,
+                Map.of(
+                        "CAUSE_CODE", "",
+                        "SUB_CAUSE_CODE", "",
+                        "REQUEST_RETRIES",
+                        Integer.toString(index % 3)
+                ),
+                Map.of(
+                        "EVENT_ID", "l_service_request",
+                        "EVENT_RESULT", "success"
+                ),
+                Map.of(
+                        "supported", "true"
+                ),
+                "raw-record-" + index
         );
     }
 }
