@@ -1,158 +1,383 @@
-# 5G Network Anomaly Detection Pipeline
+# Phát hiện Bất thường Mạng 5G/LTE
 
-Pipeline streaming dùng Apache Kafka và Apache Flink để tiền xử lý log mạng 5G/LTE và tạo dữ liệu đầu vào cho mô hình phát hiện bất thường.
+Hệ thống streaming dùng Apache Kafka và Apache Flink để chuyển đổi log mạng 5G/LTE thành các chuỗi dữ liệu model-ready phục vụ:
 
-Phần preprocessing hiện tại được chia thành ba Flink job độc lập:
+- huấn luyện mô hình phát hiện bất thường;
+- suy luận online trên dữ liệu thực tế;
+- tích hợp kết quả dự đoán với các hệ thống downstream như NWDAF.
+
+Pipeline preprocessing được tổ chức theo kiến trúc nhiều tầng:
 
 ```text
 Raw
-  ↓
+ │
+ ▼
 Bronze
-  ↓
+ │
+ ▼
 Silver
-  ↓
+ │
+ ▼
 Gold
-  ↓
+ │
+ ▼
+Model-ready Sequence
+ │
+ ▼
+Inference Service
+ │
+ ▼
+Anomaly Prediction
+ │
+ ▼
+NWDAF Adapter
+```
+
+Các mục tiêu thiết kế chính:
+
+- xử lý streaming liên tục;
+- dữ liệu có lineage rõ ràng;
+- hỗ trợ replay;
+- xử lý event-time đúng ngữ nghĩa;
+- hạn chế training-serving skew;
+- xử lý state an toàn;
+- Kafka output theo exactly-once;
+- không silently drop dữ liệu lỗi;
+- feature contract ổn định và có version;
+- có khả năng phục hồi từ checkpoint/savepoint.
+
+---
+
+# Mục lục
+
+1. [Bối cảnh nghiệp vụ](#1-bối-cảnh-nghiệp-vụ)
+2. [Phạm vi hệ thống](#2-phạm-vi-hệ-thống)
+3. [Kiến trúc tổng thể](#3-kiến-trúc-tổng-thể)
+4. [Trách nhiệm của từng tầng dữ liệu](#4-trách-nhiệm-của-từng-tầng-dữ-liệu)
+5. [Kafka Topics và luồng dữ liệu](#5-kafka-topics-và-luồng-dữ-liệu)
+6. [Tầng Bronze](#6-tầng-bronze)
+7. [Tầng Silver](#7-tầng-silver)
+8. [Event-time và Watermark](#8-event-time-và-watermark)
+9. [Tầng Gold](#9-tầng-gold)
+10. [Sinh chuỗi sự kiện](#10-sinh-chuỗi-sự-kiện)
+11. [Model Feature Contract](#11-model-feature-contract)
+12. [Training và Online Serving](#12-training-và-online-serving)
+13. [Data Quality và Side Outputs](#13-data-quality-và-side-outputs)
+14. [Processing Guarantees](#14-processing-guarantees)
+15. [Quản lý State](#15-quản-lý-state)
+16. [Phục hồi khi lỗi](#16-phục-hồi-khi-lỗi)
+17. [Replay dữ liệu](#17-replay-dữ-liệu)
+18. [Baseline đã kiểm chứng](#18-baseline-đã-kiểm-chứng)
+19. [Runtime Configuration](#19-runtime-configuration)
+20. [Build và Deployment](#20-build-và-deployment)
+21. [Monitoring và vận hành](#21-monitoring-và-vận-hành)
+22. [Mức độ sẵn sàng Production](#22-mức-độ-sẵn-sàng-production)
+23. [Bảo mật và Data Governance](#23-bảo-mật-và-data-governance)
+24. [Quản lý thay đổi](#24-quản-lý-thay-đổi)
+25. [Cấu trúc Repository](#25-cấu-trúc-repository)
+
+---
+
+# 1. Bối cảnh nghiệp vụ
+
+Mạng viễn thông liên tục phát sinh các sự kiện signaling, mobility, session và bearer liên quan đến hoạt động của UE.
+
+Ví dụ:
+
+```text
+Attach
+Detach
+Handover
+Service Request
+Tracking Area Update
+PDN Connect
+PDN Disconnect
+Bearer Modify
+Dedicated Bearer Activate
+Dedicated Bearer Deactivate
+```
+
+Một sự kiện đơn lẻ thường không đủ để xác định UE có hành vi bất thường hay không.
+
+Mô hình anomaly detection vì vậy sử dụng **chuỗi nhiều sự kiện liên tiếp của cùng một UE**.
+
+Pipeline preprocessing chịu trách nhiệm chuyển đổi:
+
+```text
+Raw network logs
+        ↓
+Validated events
+        ↓
+Normalized business events
+        ↓
+UE identity
+        ↓
+Ordered UE timeline
+        ↓
+Fixed-length sequence
+        ↓
+Model tensors
+        ↓
+Anomaly detection model
+```
+
+Gold output vì vậy không chỉ là dữ liệu đã làm sạch.
+
+Nó là **contract trực tiếp giữa nền tảng streaming và mô hình machine learning**.
+
+---
+
+# 2. Phạm vi hệ thống
+
+Repository bao gồm các thành phần chính:
+
+```text
+Data ingestion
+    ↓
+Kafka transport
+    ↓
+Flink preprocessing
+    ↓
 Model-ready sequence
+    ↓
+Inference service
+    ↓
+Anomaly prediction
+    ↓
+NWDAF integration
 ```
 
-Mỗi layer giao tiếp với layer tiếp theo thông qua Kafka, vì vậy ba job có thể chạy liên tục, restart độc lập và phục hồi state bằng checkpoint/savepoint.
+Các component:
+
+| Thành phần | Trách nhiệm |
+|---|---|
+| Log Producer / NiFi | Thu thập và đưa raw network logs vào Kafka |
+| Kafka | Streaming transport và durable layer boundary |
+| Flink Bronze | Parse và validate dữ liệu raw |
+| Flink Silver | Chuẩn hóa dữ liệu nghiệp vụ và UE identity |
+| Flink Gold | Tạo sequence và model features |
+| Inference Service | Chạy mô hình anomaly detection |
+| NWDAF Adapter | Chuyển prediction sang format phục vụ downstream NWDAF |
+
+README này tập trung chủ yếu vào:
+
+```text
+Bronze
+Silver
+Gold
+```
+
+vì đây là phần định nghĩa preprocessing contract và model-input contract.
 
 ---
 
-## 1. Kiến trúc hiện tại
+# 3. Kiến trúc tổng thể
 
 ```text
-5G / LTE raw log
-        │
-        │
-        ▼
-Log Producer / NiFi
-        │
-        ▼
-Kafka
+                       ┌──────────────────┐
+                       │  Network Logs    │
+                       └────────┬─────────┘
+                                │
+                                ▼
+                    ┌──────────────────────┐
+                    │ Log Producer / NiFi  │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                       raw.ue.log.line
+                               │
+                               ▼
+               ┌──────────────────────────────┐
+               │        Flink Bronze          │
+               │       flink-bronze-v1        │
+               │                              │
+               │ Parse envelope               │
+               │ Validate 52 fields           │
+               │ Normalize EVENT_TIME         │
+               │ Type conversion              │
+               │ Preserve Kafka metadata      │
+               └──────────────┬───────────────┘
+                              │
+                              ▼
+                      bronze.ue.event
+                              │
+                              ▼
+             ┌─────────────────────────────────┐
+             │          Flink Silver           │
+             │         flink-silver-v1         │
+             │                                 │
+             │ Source timestamp                │
+             │ Watermark                       │
+             │ Watermark alignment             │
+             │ UE identity resolution          │
+             │ Event normalization             │
+             │ Deduplication                   │
+             │ keyBy ueKey                     │
+             │ Late routing                    │
+             └───────────────┬─────────────────┘
+                             │
+                             ▼
+                     silver.ue.event
+                             │
+                             ▼
+              ┌──────────────────────────────┐
+              │         Flink Gold           │
+              │        flink-gold-v1         │
+              │                              │
+              │ keyBy ueKey                  │
+              │ Per-UE reorder               │
+              │ Sliding sequence             │
+              │ Feature encoding             │
+              └──────────────┬───────────────┘
+                             │
+                             ▼
+                     gold.ue.sequence
+                             │
+                             ▼
+                  Inference Service
+                             │
+                             ▼
+                  anomaly-predictions
+                             │
+                             ▼
+                     NWDAF Adapter
+```
+
+Bronze, Silver và Gold là **ba Flink job độc lập**.
+
+Kafka là durable boundary giữa các tầng.
+
+Ưu điểm:
+
+- restart từng job độc lập;
+- replay từng layer độc lập;
+- quản lý consumer offset riêng;
+- quản lý state riêng;
+- scale độc lập;
+- giảm coupling giữa các tầng.
+
+---
+
+# 4. Trách nhiệm của từng tầng dữ liệu
+
+## Raw
+
+Raw là dữ liệu gần nhất với source ban đầu.
+
+Topic:
+
+```text
 raw.ue.log.line
-        │
-        ▼
-┌─────────────────────┐
-│    Flink Bronze     │
-│   flink-bronze-v1   │
-│                     │
-│ Parse raw envelope  │
-│ Validate 52 fields  │
-│ Normalize timestamp │
-│ Type conversion     │
-└──────────┬──────────┘
-           │
-           ▼
-Kafka
-bronze.ue.event
-           │
-           ▼
-┌─────────────────────────┐
-│      Flink Silver       │
-│     flink-silver-v1     │
-│                         │
-│ Resolve UE identity     │
-│ Normalize event         │
-│ Deduplicate             │
-│ Event-time watermark    │
-│ Late-event routing      │
-└────────────┬────────────┘
-             │
-             ▼
-Kafka
-silver.ue.event
-             │
-             ▼
-┌──────────────────────────┐
-│        Flink Gold        │
-│      flink-gold-v1       │
-│                          │
-│ Event-time ordering      │
-│ keyBy UE                 │
-│ sequence length = 32     │
-│ stride = 8               │
-│ feature encoding         │
-└─────────────┬────────────┘
-              │
-              ▼
-Kafka
-gold.ue.sequence
-              │
-              ▼
-Model input
-
-x_cat[32][4]
-x_num[32][2]
 ```
 
-Kafka đóng vai trò boundary giữa các layer. Bronze, Silver và Gold là ba streaming job độc lập chứ không phải ba bước nằm trong một Flink job duy nhất.
+Raw nên được xem là immutable source để phục vụ full replay.
 
 ---
 
-## 2. Runtime stack
+## Bronze
 
-Local development hiện sử dụng:
+Bronze trả lời câu hỏi:
 
-- Java 17
-- Apache Flink 1.20.1
-- Apache Kafka 3.8.1
-- Maven
-- Docker Compose
-- Kafka single-node KRaft
-- 1 Flink JobManager
-- 1 Flink TaskManager
-- 9 Task Slots cho ba job parallelism 3
+> Record raw này có hợp lệ về mặt cấu trúc hay không?
 
-Flink Web UI:
+Bronze thực hiện:
 
 ```text
-http://localhost:8081
+Parse
+Schema validation
+Timestamp normalization
+Type conversion
+Source metadata preservation
 ```
 
-Kafka listener:
+Bronze không thực hiện model feature engineering.
+
+---
+
+## Silver
+
+Silver trả lời:
+
+> Đây là sự kiện nghiệp vụ nào và thuộc về UE nào?
+
+Silver thực hiện:
 
 ```text
-Host:
-localhost:9092
+UE identity resolution
+Business event normalization
+Deduplication
+Event-time control
+Late routing
+```
 
-Docker network:
-kafka:29092
+Silver là canonical normalized event layer.
+
+---
+
+## Gold
+
+Gold trả lời:
+
+> Các event của cùng UE được biến thành model input như thế nào?
+
+Gold thực hiện:
+
+```text
+Per-UE ordering
+Sliding sequence
+Categorical encoding
+Numeric normalization
+Model tensor generation
+Evidence generation
 ```
 
 ---
 
-## 3. Kafka topics
+# 5. Kafka Topics và luồng dữ liệu
 
-### Main pipeline
-
-| Layer | Input | Output | Consumer Group |
-|---|---|---|---|
-| Bronze | `raw.ue.log.line` | `bronze.ue.event` | `flink-bronze-v1` |
-| Silver | `bronze.ue.event` | `silver.ue.event` | `flink-silver-v1` |
-| Gold | `silver.ue.event` | `gold.ue.sequence` | `flink-gold-v1` |
-
-### Side-output topics
-
-| Topic | Layer | Mục đích |
-|---|---|---|
-| `dlq.ue.log.line` | Bronze | Raw record không parse/validate được |
-| `invalid-identity` | Silver | Không resolve được UE identity |
-| `unsupported-event` | Silver | Event không thuộc supported event catalog |
-| `late-ue-event` | Silver | Event đến sau Silver watermark |
-| `gold-too-late-event` | Gold | Event đến quá trễ đối với Gold state |
-| `invalid-gold-feature` | Gold | Sequence không encode được theo feature contract |
-
-Danh sách topic chính thức nằm tại:
+Source of truth:
 
 ```text
 config/kafka/topics.yaml
 ```
 
+Cấu hình local hiện tại:
+
+```text
+partitions         = 3
+replication factor = 1
+```
+
+## Main topics
+
+| Topic | Producer | Consumer |
+|---|---|---|
+| `raw.ue.log.line` | Log Producer | Bronze |
+| `bronze.ue.event` | Bronze | Silver |
+| `silver.ue.event` | Silver | Gold |
+| `gold.ue.sequence` | Gold | Inference Service |
+| `anomaly-predictions` | Inference Service | NWDAF Adapter |
+
+## Side-output topics
+
+| Topic | Tầng | Ý nghĩa |
+|---|---|---|
+| `dlq.ue.log.line` | Bronze | Raw record parse/validate thất bại |
+| `invalid-identity` | Silver | Không resolve được UE identity |
+| `unsupported-event` | Silver | Event không nằm trong supported catalog |
+| `late-ue-event` | Silver | Event vượt event-time boundary của Silver |
+| `gold-too-late-event` | Gold | Event đến sau khi timeline của cùng UE đã finalized |
+| `invalid-gold-feature` | Gold | Sequence không encode được theo feature contract |
+
+Nguyên tắc:
+
+> Không silently drop dữ liệu lỗi.
+
+Mỗi loại lỗi cần được route sang side output riêng để monitoring và investigation.
+
 ---
 
-## 4. Bronze layer
+# 6. Tầng Bronze
 
 Entry point:
 
@@ -160,31 +385,29 @@ Entry point:
 com.network.preprocess.bronze.BronzeJob
 ```
 
-Pipeline:
+Flow:
 
 ```text
 raw.ue.log.line
         ↓
 KafkaRawRecord
         ↓
-BronzeTransformer
+Envelope parser
+        ↓
+Raw log parser
+        ↓
+Schema validation
+        ↓
+Timestamp normalization
+        ↓
+Type conversion
         ↓
 BronzeEvent
         ↓
 bronze.ue.event
 ```
 
-Bronze thực hiện:
-
-1. Đọc raw envelope từ Kafka.
-2. Parse raw payload.
-3. Kiểm tra raw log có đúng 52 field.
-4. Chuẩn hóa timestamp.
-5. Chuyển dữ liệu sang kiểu phù hợp.
-6. Ghi record hợp lệ vào `bronze.ue.event`.
-7. Route record lỗi sang `dlq.ue.log.line`.
-
-Raw log hiện sử dụng:
+## Raw log format
 
 ```text
 delimiter   = ;
@@ -192,9 +415,62 @@ field-count = 52
 timezone    = Asia/Ho_Chi_Minh
 ```
 
+Parser phải giữ trailing empty fields.
+
+Ví dụ:
+
+```text
+a;b;c;;
+```
+
+vẫn chứa đầy đủ các cột rỗng cuối record.
+
 ---
 
-## 5. Silver layer
+## Timestamp
+
+Timestamp raw được hiểu theo:
+
+```text
+Asia/Ho_Chi_Minh
+```
+
+và chuẩn hóa về UTC:
+
+```text
+ISO-8601 UTC
+```
+
+Ví dụ:
+
+```text
+2024-06-26T07:05:23.330Z
+```
+
+Downstream sử dụng timestamp đã normalize này làm event time.
+
+---
+
+## Kafka source lineage
+
+Bronze giữ:
+
+```text
+source.topic
+source.partition
+source.offset
+```
+
+Metadata này dùng cho:
+
+- traceability;
+- audit;
+- deduplication;
+- replay investigation.
+
+---
+
+# 7. Tầng Silver
 
 Entry point:
 
@@ -202,66 +478,172 @@ Entry point:
 com.network.preprocess.silver.SilverJob
 ```
 
-Pipeline:
+Topology hiện tại:
 
 ```text
 bronze.ue.event
         ↓
-UE identity resolution
+KafkaSource
         ↓
-Event normalization
+Timestamp + Watermark
         ↓
-Deduplication
+Watermark Alignment
         ↓
-Event-time watermark
+Resolve UE Identity
         ↓
-Late-event routing
+Normalize Event
+        ↓
+keyBy(source coordinates)
+        ↓
+Deduplicate
+        ↓
+keyBy(ueKey)
+        ↓
+Late routing
         ↓
 silver.ue.event
 ```
 
-Silver chịu trách nhiệm chuẩn hóa dữ liệu nghiệp vụ trước khi Gold tạo sequence.
+---
 
-### Deduplication
+## UE Identity Resolution
 
-Deduplication sử dụng Kafka source metadata để xác định lại cùng một Kafka record.
-
-State được giữ với TTL:
+Canonical identity:
 
 ```text
-24 hours
+ueKey
 ```
 
-### Event time
+Hiện tại ưu tiên IMSI.
 
-Silver sử dụng:
+Logic tổng quát:
 
 ```text
-max out-of-orderness = 30 seconds
-idleness timeout     = 60 seconds
+Nếu có IMSI
+    ↓
+dùng IMSI
+
+Nếu không
+    ↓
+MSISDN / MTMSI mapping
+    ↓
+IMSI
 ```
 
-Partition không có dữ liệu trong thời gian idleness sẽ không giữ watermark của toàn pipeline.
-
-### Supported event catalog
-
-Model hiện hỗ trợ 9 event:
+Nếu không resolve được:
 
 ```text
-l_attach
-l_bearer_modify
-l_dedicated_bearer_activate
-l_dedicated_bearer_deactivate
-l_detach
-l_handover
-l_pdn_connect
-l_service_request
-l_tau
+invalid-identity
 ```
 
 ---
 
-## 6. Gold layer
+## Deduplication
+
+Silver deduplicate theo:
+
+```text
+source.topic
++
+source.partition
++
+source.offset
+```
+
+Ví dụ:
+
+```text
+raw.ue.log.line
+partition = 1
+offset    = 200
+```
+
+sẽ luôn tạo cùng dedup key.
+
+Điều này giúp record bị Kafka/Flink đọc lại sau restart không bị xử lý như event mới.
+
+Không dùng:
+
+```text
+ueKey
+```
+
+làm dedup key vì một UE hợp lệ có nhiều event khác nhau.
+
+---
+
+# 8. Event-time và Watermark
+
+Processing-time không đại diện chính xác cho thời gian nghiệp vụ của network event.
+
+Pipeline vì vậy dùng:
+
+```text
+event-time
+```
+
+---
+
+## Silver Source Watermark
+
+Watermark được tạo **ngay tại Kafka source của Silver**.
+
+Không assign lại watermark sau `keyBy`.
+
+Cấu hình:
+
+```text
+bounded out-of-orderness = 30 seconds
+idleness timeout         = 60 seconds
+```
+
+Timestamp:
+
+```text
+BronzeEvent.eventTime
+```
+
+Không dùng:
+
+```text
+Kafka CreateTime
+```
+
+---
+
+## Watermark Alignment
+
+Silver bật watermark alignment cho Kafka source partitions.
+
+Cấu hình:
+
+```text
+alignment group:
+silver-bronze-kafka-source
+
+max drift:
+5 seconds
+
+update interval:
+1 second
+```
+
+Mục tiêu:
+
+> Không cho một Kafka source partition chạy nhanh hơn các partition còn lại hàng phút.
+
+Điều này đặc biệt quan trọng khi:
+
+```text
+historical replay
+backfill
+consumer throughput không đều
+partition workload không cân bằng
+```
+
+---
+
+# 9. Tầng Gold
 
 Entry point:
 
@@ -269,59 +651,192 @@ Entry point:
 com.network.preprocess.gold.GoldJob
 ```
 
-Gold đọc:
+Input:
 
 ```text
 silver.ue.event
 ```
 
-và ghi model-ready sample vào:
+Output:
 
 ```text
 gold.ue.sequence
 ```
 
-Gold thực hiện:
+Flow:
 
 ```text
 SilverEvent
     ↓
 GoldSequenceEvent
     ↓
-keyBy ueKey
+keyBy(ueKey)
     ↓
-event-time ordering
+Per-UE reorder state
     ↓
-sliding sequence
+Ordered UE timeline
     ↓
-feature encoder
+Sliding sequence
+    ↓
+Feature encoding
     ↓
 GoldSequenceSample
 ```
 
-### Sequence contract
+---
+
+## Nguyên tắc ordering
+
+Kafka partition là transport concept.
+
+UE timeline là business/model concept.
+
+Không được đánh đồng hai khái niệm này.
+
+Một Kafka partition có thể chứa:
 
 ```text
-sequence length = 32
+UE-A
+UE-B
+UE-C
+...
+```
+
+Do đó:
+
+> Timestamp tiến xa của UE-A không được làm event UE-B trở thành late.
+
+Gold thực hiện:
+
+```text
+keyBy(ueKey)
+```
+
+và giữ timeline state riêng cho từng UE.
+
+---
+
+# 10. Sinh chuỗi sự kiện
+
+Sequence contract:
+
+```text
+length          = 32
 stride          = 8
-partial window  = false
+partial windows = false
 ```
 
 Ví dụ:
 
 ```text
-Event  1 .. 32 → sample 1
-Event  9 .. 40 → sample 2
-Event 17 .. 48 → sample 3
+Event 1  → 32
+        ↓
+Window 1
+
+Event 9  → 40
+        ↓
+Window 2
+
+Event 17 → 48
+        ↓
+Window 3
 ```
 
-Đây là count-based sliding sequence, không phải time-window 1 phút hoặc 5 phút.
+Đây là:
+
+```text
+count-based sliding sequence
+```
+
+không phải time window.
 
 ---
 
-## 7. Model feature contract
+## Per-UE reorder tolerance
 
-Source of truth nằm trong:
+Gold dùng:
+
+```text
+30 seconds
+```
+
+Với mỗi UE:
+
+```text
+safeThrough
+=
+maxSeenEventTime
+-
+30 seconds
+```
+
+Event đủ cũ so với `maxSeenEventTime` sẽ được:
+
+```text
+sort
+ ↓
+finalize
+ ↓
+append vào sequence
+```
+
+---
+
+## Too-late semantics
+
+Gold không dùng Kafka partition watermark làm business late rule.
+
+Event bị coi là too-late khi:
+
+```text
+event.eventTime
+<=
+finalizedThrough
+```
+
+của **chính cùng `ueKey`**.
+
+Khi đó sequence cũ đã emit và không còn an toàn để chèn event ngược vào.
+
+Side output:
+
+```text
+gold-too-late-event
+```
+
+---
+
+## Idle flush
+
+Gold hiện dùng:
+
+```text
+per-UE idle flush = 60 seconds
+```
+
+Nếu UE không phát sinh event mới đủ lâu:
+
+```text
+pending buffer
+    ↓
+sort
+    ↓
+flush
+    ↓
+finalize
+```
+
+Mục tiêu:
+
+- tránh giữ tail event vô thời hạn;
+- hoàn tất tail trong replay;
+- hỗ trợ live serving khi UE tạm ngừng phát sinh event.
+
+---
+
+# 11. Model Feature Contract
+
+Source of truth:
 
 ```text
 flink-preprocess/src/main/resources/application.yaml
@@ -340,137 +855,211 @@ x_cat[32][4]
 x_num[32][2]
 ```
 
-### Categorical tensor
+---
+
+## Categorical tensor
 
 ```text
-x_cat[:, 0] → event_code
-x_cat[:, 1] → event_result_code
-x_cat[:, 2] → normalized_cause_code
-x_cat[:, 3] → sub_cause_code
+x_cat
 ```
 
-Data type:
+Shape:
+
+```text
+[32][4]
+```
+
+Type:
 
 ```text
 INT64
 ```
 
-Unknown hoặc missing categorical value không được tự động thêm vocabulary:
+Order:
 
 ```text
-unknown-policy = REJECT
-missing-policy = REJECT
+x_cat[:, 0] = event_code
+
+x_cat[:, 1] = event_result_code
+
+x_cat[:, 2] = normalized_cause_code
+
+x_cat[:, 3] = sub_cause_code
 ```
 
-### Numeric tensor
+Vocabulary là fixed vocabulary.
+
+Runtime không tự tạo category ID mới.
+
+---
+
+## Numeric tensor
 
 ```text
-x_num[:, 0] → duration_ms
-x_num[:, 1] → request_retries
+x_num
 ```
 
-Data type:
+Shape:
+
+```text
+[32][2]
+```
+
+Type:
 
 ```text
 FLOAT32
 ```
 
-Normalized valid range:
+Order:
 
 ```text
-[0.0, 1.0]
+x_num[:, 0] = duration_ms
+
+x_num[:, 1] = request_retries
 ```
 
-### Quan trọng
+Clip range và normalization rule được định nghĩa trong feature contract.
 
-Không được thay đổi:
+---
+
+## Quy tắc versioning
+
+Không được thay đổi các thành phần sau mà vẫn giữ nguyên feature version:
 
 ```text
 sequence length
 stride
 feature count
 feature order
-vocabulary mapping
-normalization rule
+vocabulary
+category ID
+numeric clipping
+normalization
+missing-value semantics
 ```
 
-mà vẫn giữ:
+Nếu thay đổi:
 
 ```text
-gold-ue-sequence-feature-v2
-```
-
-Nếu feature contract thay đổi thì cần:
-
-```text
-1. tạo feature version mới
-2. train lại model tương ứng
-3. deploy model mới tương ứng
+1. tạo feature-version mới
+2. regenerate training data
+3. train lại model
+4. version model
+5. deploy model và preprocessing tương thích
 ```
 
 ---
 
-## 8. Gold output
+# 12. Training và Online Serving
 
-Một Kafka message trong:
-
-```text
-gold.ue.sequence
-```
-
-tương ứng một model-ready sample.
-
-Cấu trúc chính:
-
-```json
-{
-  "schema_version": "gold-sequence-v1",
-  "feature_version": "gold-ue-sequence-feature-v2",
-  "sample_id": "...",
-  "ue_key": "...",
-  "imsi": "...",
-  "sequence_length": 32,
-  "stride": 8,
-  "model_input": {
-    "x_cat": [],
-    "x_num": []
-  },
-  "evidence": {
-    "events": []
-  }
-}
-```
-
-Model chỉ sử dụng:
+Một mục tiêu quan trọng là giảm:
 
 ```text
-model_input.x_cat
-model_input.x_num
+training-serving skew
 ```
 
-`evidence` phục vụ:
+Training và inference phải dùng cùng:
 
-- debug
-- audit
-- UI
-- giải thích anomaly
-- điều tra dữ liệu
+```text
+ueKey semantics
+event ordering
+sequence length
+stride
+feature order
+categorical vocabulary
+numeric normalization
+feature version
+```
 
-Các evidence field có thể cấu hình trong `application.yaml` mà không thay đổi model tensor contract.
+Luồng logic:
+
+```text
+                 SilverEvent
+                      │
+                      ▼
+             Shared Gold Contract
+                      │
+            ┌─────────┴─────────┐
+            │                   │
+            ▼                   ▼
+     Historical Replay       Live Stream
+            │                   │
+            ▼                   ▼
+      Training Dataset        Inference
+```
+
+Gold output cần mang:
+
+```text
+schema_version
+feature_version
+```
+
+để downstream xác định compatibility.
 
 ---
 
-## 9. Checkpoint và Exactly-Once
+# 13. Data Quality và Side Outputs
 
-Bronze, Silver và Gold dùng chung runtime configuration:
+Mỗi lớp lỗi cần có ý nghĩa rõ ràng.
+
+## Bronze
 
 ```text
-parallelism                  = 3
-checkpoint interval          = 60 seconds
-checkpoint timeout           = 5 minutes
-max concurrent checkpoints   = 1
-minimum pause                = 30 seconds
+dlq.ue.log.line
 ```
+
+Các lỗi ví dụ:
+
+```text
+Malformed JSON
+Invalid envelope
+Wrong field count
+Invalid timestamp
+Type conversion error
+```
+
+---
+
+## Silver
+
+```text
+invalid-identity
+unsupported-event
+late-ue-event
+```
+
+Không nên gộp các lỗi này vào cùng một DLQ vì nguyên nhân và cách xử lý khác nhau.
+
+---
+
+## Gold
+
+```text
+gold-too-late-event
+invalid-gold-feature
+```
+
+Phân biệt:
+
+```text
+too-late
+=
+ordering/timeline issue
+```
+
+và:
+
+```text
+invalid-feature
+=
+model contract issue
+```
+
+---
+
+# 14. Processing Guarantees
 
 Kafka sinks sử dụng:
 
@@ -478,71 +1067,102 @@ Kafka sinks sử dụng:
 EXACTLY_ONCE
 ```
 
-Kafka consumers downstream sử dụng:
+Consumer downstream nên sử dụng:
 
 ```text
-read_committed
+isolation.level=read_committed
 ```
 
-Do đó output transactional chỉ được downstream nhìn thấy sau khi transaction tương ứng được commit.
+để chỉ nhìn thấy Kafka transaction đã commit.
 
 ---
 
-## 10. Runtime state
+## Không dùng offset làm business record count
 
-Flink state local được lưu tại:
+Kafka log-end offset có thể bao gồm transaction/control records.
+
+Do đó:
 
 ```text
-runtime/flink/
-├── checkpoints/
-├── savepoints/
-├── logs/
-└── usrlib/
+kafka-get-offsets.sh
 ```
 
-Docker mount:
+không phải nguồn chính xác để đếm business records.
+
+Cách đếm committed record:
+
+```bash
+docker compose exec -T kafka bash -c "
+  /opt/kafka/bin/kafka-console-consumer.sh \
+    --bootstrap-server localhost:29092 \
+    --topic silver.ue.event \
+    --from-beginning \
+    --consumer-property isolation.level=read_committed \
+    --timeout-ms 10000 \
+    2>/dev/null | wc -l
+"
+```
+
+---
+
+# 15. Quản lý State
+
+Silver và Gold sử dụng:
 
 ```text
-Host:
+EmbeddedRocksDBStateBackend
+```
+
+Stateful use cases:
+
+```text
+Silver:
+deduplication
+
+Gold:
+per-UE reorder
+finalized timeline
+sliding sequence
+idle timer
+```
+
+State TTL:
+
+```text
+24 hours
+```
+
+RocksDB được sử dụng để tránh giữ toàn bộ keyed state trong JVM heap.
+
+---
+
+# 16. Phục hồi khi lỗi
+
+Checkpoint configuration:
+
+```text
+checkpoint interval          = 60 seconds
+checkpoint timeout           = 300 seconds
+max concurrent checkpoints   = 1
+minimum pause                = 30 seconds
+```
+
+Runtime directories:
+
+```text
 runtime/flink/checkpoints
-
-Container:
-/opt/flink/runtime/checkpoints
-```
-
-và:
-
-```text
-Host:
 runtime/flink/savepoints
-
-Container:
-/opt/flink/runtime/savepoints
 ```
-
-Các thư mục này là runtime artifact và không được commit Git.
-
-Không xóa thủ công:
-
-```text
-runtime/flink/checkpoints/*
-runtime/flink/savepoints/*
-```
-
-khi chưa xác định rõ state nào còn cần dùng.
 
 ---
 
-## 11. Stable operator UID
+## Stable Operator UID
 
-Các operator quan trọng trong Bronze, Silver và Gold sử dụng `.uid(...)` cố định.
+Stateful operator sử dụng UID cố định.
 
 Ví dụ:
 
 ```text
-bronze-kafka-source-v1
-bronze-transform-v1
-
 silver-bronze-event-source-v1
 silver-deduplicate-source-offset-v1
 silver-late-event-router-v1
@@ -552,286 +1172,95 @@ gold-build-sequence-window-v1
 gold-encode-model-feature-v1
 ```
 
-UID ổn định giúp Flink map operator state khi restore từ checkpoint/savepoint.
+Không tùy tiện đổi UID nếu còn cần restore state cũ.
 
-Không tùy tiện đổi UID của stateful operator trong một deployment đang cần restore state cũ.
-
----
-
-## 12. Build Flink job
-
-Từ root repository:
-
-```bash
-./scripts/build-flink-job.sh
-```
-
-Script build Maven module:
-
-```text
-flink-preprocess
-```
-
-và deploy JAR tới:
-
-```text
-runtime/flink/usrlib/flink-preprocess-1.0.0-SNAPSHOT.jar
-```
-
-JAR trong `runtime/flink/usrlib` độc lập với Maven `target`, nên `mvn clean` không xóa JAR đang được Flink container sử dụng.
+Đổi UID phải được xem là state migration.
 
 ---
 
-## 13. Start pipeline
+# 17. Replay dữ liệu
 
-Lần đầu:
+Kafka boundary cho phép replay theo từng layer.
 
-```bash
-cp .env.example .env
-```
-
-Sau đó:
-
-```bash
-./scripts/start.sh
-```
-
-`start.sh` chịu trách nhiệm:
-
-```text
-Docker services
-      ↓
-Kafka ready
-      ↓
-Kafka topics
-      ↓
-Flink runtime
-      ↓
-JAR availability
-      ↓
-submit / restore jobs
-```
-
-Submit order:
-
-```text
-Gold
-  ↓
-Silver
-  ↓
-Bronze
-```
-
-Downstream được khởi động trước để consumer sẵn sàng trước khi upstream bắt đầu phát sinh dữ liệu.
-
-Kiểm tra:
-
-```bash
-docker exec a-flink-jobmanager \
-  flink list -r
-```
-
-Kết quả bình thường phải có đúng:
-
-```text
-flink-gold-v1   (RUNNING)
-flink-silver-v1 (RUNNING)
-flink-bronze-v1 (RUNNING)
-```
-
-Không được có duplicate instance của cùng một job.
+Không cần full replay nếu upstream layer đã được xác nhận đúng.
 
 ---
 
-## 14. Submit job thủ công qua script
+## Gold-only replay
 
-Có thể chạy:
-
-```bash
-./scripts/submit-flink-job.sh
-```
-
-Script có duplicate protection.
-
-Nếu cả ba job đã RUNNING:
+Dùng khi:
 
 ```text
-Gold   = 1
-Silver = 1
-Bronze = 1
+Silver đúng
+Gold logic thay đổi
+sequence logic thay đổi
+feature encoder thay đổi
 ```
 
-script không submit thêm.
-
-Nếu topology bị partial, ví dụ:
+Giữ:
 
 ```text
-Gold   RUNNING
-Silver RUNNING
-Bronze missing
+silver.ue.event
 ```
 
-script sẽ fail thay vì tự động restore hoặc submit một job không rõ state.
+Reset:
 
-Điều này tránh rollback hoặc mất state ngoài ý muốn.
+```text
+flink-gold-v1
+
+gold.ue.sequence
+gold-too-late-event
+invalid-gold-feature
+```
 
 ---
 
-## 15. State-safe stop
+## Silver + Gold replay
 
-Không dùng `docker compose down` trực tiếp để dừng một pipeline stateful đang chạy.
-
-Dùng:
-
-```bash
-./scripts/stop.sh
-```
-
-Script thực hiện:
+Dùng khi:
 
 ```text
-Bronze
-   ↓
-savepoint
-   ↓
-stop
-
-Silver
-   ↓
-savepoint
-   ↓
-stop
-
-Gold
-   ↓
-savepoint
-   ↓
-stop
+Bronze đúng
+Silver logic thay đổi
+watermark thay đổi
+identity logic thay đổi
 ```
 
-Sau khi cả ba savepoint thành công, script tạo:
+Giữ:
 
 ```text
-runtime/flink/restore-manifest.env
+bronze.ue.event
 ```
 
-Manifest lưu đường dẫn:
+Reset:
 
 ```text
-BRONZE_SAVEPOINT
-SILVER_SAVEPOINT
-GOLD_SAVEPOINT
+flink-silver-v1
+flink-gold-v1
+
+silver.ue.event
+invalid-identity
+unsupported-event
+late-ue-event
+
+gold.ue.sequence
+gold-too-late-event
+invalid-gold-feature
 ```
-
-Sau đó Docker services mới được stop.
-
-### Stop order
-
-```text
-Bronze → Silver → Gold
-```
-
-Bronze được dừng trước để ngăn raw data mới tiếp tục chảy vào pipeline.
 
 ---
 
-## 16. Restore từ savepoint
+## Full replay
 
-Lần `start.sh` tiếp theo:
-
-```bash
-./scripts/start.sh
-```
-
-nếu tìm thấy:
+Dùng khi:
 
 ```text
-runtime/flink/restore-manifest.env
+raw parser thay đổi
+Bronze schema thay đổi
+timestamp normalization thay đổi
 ```
 
-pipeline sẽ chạy restore mode.
-
-Restore order:
-
-```text
-Gold
-  ↓
-Silver
-  ↓
-Bronze
-```
-
-Mỗi job được submit với:
-
-```text
-flink run -s <savepoint>
-```
-
-Không sử dụng:
-
-```text
---allowNonRestoredState
-```
-
-trong normal lifecycle.
-
-Nếu state không map được, deployment phải fail để điều tra thay vì âm thầm bỏ state.
-
-Sau khi cả ba job restore thành công, manifest được archive:
-
-```text
-restore-manifest.env.used.<timestamp>
-```
-
-nhằm tránh lần start tiếp theo vô tình restore lại cùng savepoint.
-
----
-
-## 17. Kiểm tra Kafka consumer lag
-
-Bronze:
-
-```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server kafka:29092 \
-  --describe \
-  --group flink-bronze-v1
-```
-
-Silver:
-
-```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server kafka:29092 \
-  --describe \
-  --group flink-silver-v1
-```
-
-Gold:
-
-```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server kafka:29092 \
-  --describe \
-  --group flink-gold-v1
-```
-
-Sau restart có thể tạm thời xuất hiện lag. Khi pipeline bắt kịp Kafka, lag sẽ giảm về 0.
-
----
-
-## 18. End-to-end smoke test
-
-Chạy:
-
-```bash
-./scripts/test-pipeline.sh
-```
-
-Smoke test tự động kiểm tra:
+Replay:
 
 ```text
 Raw
@@ -843,352 +1272,607 @@ Silver
 Gold
 ```
 
-Smoke data sử dụng một IMSI mới cho mỗi lần chạy để không bị trộn với Gold state cũ.
+---
 
-Test gửi:
+## Quy trình replay khuyến nghị
 
 ```text
-40 target events
-+
-1 watermark flush event
+1. Stop các job bị ảnh hưởng
+2. Xác nhận upstream Kafka data hoàn chỉnh
+3. Reset consumer group bị ảnh hưởng
+4. Xóa đúng downstream output topics
+5. Recreate topics
+6. Không restore incompatible savepoint
+7. Deploy đúng JAR
+8. Submit downstream trước upstream
+9. Chờ consumer lag = 0
+10. Đếm committed records
+11. So sánh với regression baseline
+```
+
+---
+
+
+# 19. Runtime Configuration
+
+Local environment:
+
+```text
+Java          17
+Flink         1.20.1
+Kafka         3.8.1
+NiFi          1.28.1
+```
+
+Job parallelism:
+
+```text
+Bronze = 2
+Silver = 2
+Gold   = 2
+```
+
+TaskManager topology:
+
+```text
+2 TaskManagers
+×
+3 slots
 =
-41 raw events
-```
-
-Expected:
-
-```text
-Raw     41
-Bronze  41
-Silver  41
-Gold     2
-```
-
-Gold windows:
-
-```text
-events 1..32
-events 9..40
-```
-
-Flush event ở event-time phía sau dùng để đẩy watermark đủ xa cho Gold event-time timer fire.
-
-Smoke test còn kiểm tra:
-
-```text
-x_cat[32][4]
-x_num[32][2]
-feature_version
-sequence_length
-stride
-sample_id
-x_cat/x_num JSON field names
-side-output topics
-```
-
-Expected final result:
-
-```text
-================================================
- END-TO-END SMOKE TEST PASSED
-================================================
-
-Pipeline:
-
-  Raw     41/41 PASS
-  Bronze  41/41 PASS
-  Silver  41/41 PASS
-  Gold     2/2 PASS
-
-Model contract:
-
-  x_cat[32][4] PASS
-  x_num[32][2] PASS
-
-Side outputs:
-
-  PASS
+6 task slots
 ```
 
 ---
 
-## 19. Generate smoke data riêng
+# 20. Build và Deployment
 
-Có thể chỉ tạo dữ liệu test mà chưa gửi Kafka:
-
-```bash
-./scripts/create-gold-smoke-data.sh
-```
-
-File được tạo tại:
-
-```text
-data/smoke-gold/gold-smoke.log
-```
-
-Kiểm tra:
+Build:
 
 ```bash
-wc -l data/smoke-gold/gold-smoke.log
+./scripts/build-flink-job.sh
 ```
 
-Expected:
+Flow:
 
 ```text
-41
+mvn clean package
+        ↓
+verify JAR
+        ↓
+copy deploy artifact
+        ↓
+runtime/flink/usrlib
+```
+
+JAR:
+
+```text
+runtime/flink/usrlib/
+└── flink-preprocess-1.0.0-SNAPSHOT.jar
+```
+
+Container path:
+
+```text
+/opt/flink/usrlib/flink-preprocess-1.0.0-SNAPSHOT.jar
+```
+
+Verify:
+
+```bash
+docker exec a-flink-jobmanager \
+  ls -lh /opt/flink/usrlib/
 ```
 
 ---
 
-## 20. Log Producer
+## Start local runtime
 
-Trong local development, `log-producer` mô phỏng phần ingest trước Kafka.
-
-Pipeline:
-
-```text
-input directory
-      ↓
-FileLogReader
-      ↓
-RawNetworkEventFactory
-      ↓
-JSON envelope
-      ↓
-Kafka producer
-      ↓
-raw.ue.log.line
-```
-
-Producer chỉ ingest raw line.
-
-Producer không:
-
-```text
-parse 52 business fields
-normalize event
-resolve identity
-generate features
-```
-
-Các trách nhiệm đó thuộc Flink.
-
-Chạy producer thủ công:
+Kafka + JobManager:
 
 ```bash
-mvn \
-  -f log-producer/pom.xml \
-  -Dexec.mainClass=com.network.producer.LogProducerApplication \
-  -Dexec.args="data/raw/incoming" \
-  exec:java
+docker compose up -d \
+  kafka \
+  flink-jobmanager
+```
+
+TaskManagers:
+
+```bash
+docker compose up -d \
+  --scale flink-taskmanager=2 \
+  flink-taskmanager
+```
+
+Verify:
+
+```bash
+docker compose ps
 ```
 
 ---
 
-## 21. Useful commands
-
-### List Kafka topics
+## Create topics
 
 ```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-topics.sh \
-  --bootstrap-server kafka:29092 \
-  --list
+./scripts/create-topics.sh
 ```
 
-### List Flink jobs
+---
+
+## Submit jobs
+
+```bash
+./scripts/submit-flink-job.sh
+```
+
+Order:
+
+```text
+Gold
+ ↓
+Silver
+ ↓
+Bronze
+```
+
+Downstream-first giúp consumer sẵn sàng trước upstream.
+
+---
+
+## Verify Flink jobs
 
 ```bash
 docker exec a-flink-jobmanager \
   flink list -r
 ```
 
-### Check Gold topic end offsets
+Expected:
 
-```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-get-offsets.sh \
-  --bootstrap-server kafka:29092 \
-  --topic gold.ue.sequence \
-  --time -1
+```text
+flink-gold-v1
+flink-silver-v1
+flink-bronze-v1
 ```
 
-### Read committed Gold records
+Không được tồn tại duplicate RUNNING instance của cùng một job.
 
-```bash
-docker exec a-kafka \
-  /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server kafka:29092 \
-  --topic gold.ue.sequence \
-  --from-beginning \
-  --consumer-property isolation.level=read_committed
+---
+
+# 21. Monitoring và vận hành
+
+Production monitoring không chỉ kiểm tra:
+
+```text
+job RUNNING
 ```
 
-### Docker status
+mà phải giám sát cả technical metrics và business/data-quality metrics.
 
-```bash
-docker compose ps
-```
+---
 
-### JobManager logs
+## Flink metrics
 
-```bash
-docker logs a-flink-jobmanager
-```
+Nên theo dõi:
 
-### TaskManager logs
-
-```bash
-docker logs a-flink-taskmanager
+```text
+Job state
+Restart count
+Checkpoint success
+Checkpoint failure
+Checkpoint duration
+Checkpoint size
+Backpressure
+Busy time
+Idle time
+TaskManager memory
+Managed memory
+RocksDB state size
+GC
 ```
 
 ---
 
-## 22. Repository structure
+## Kafka metrics
+
+```text
+Consumer lag
+Partition lag imbalance
+Producer error
+Consumer error
+Transaction error
+Broker disk usage
+Throughput
+Under-replicated partition
+```
+
+---
+
+## Business/Data metrics
+
+```text
+Raw received count
+
+Bronze accepted
+Bronze DLQ
+
+Silver accepted
+Invalid identity
+Unsupported event
+Silver late
+
+Gold sequence
+Gold too-late
+Invalid Gold feature
+```
+
+Recommended ratios:
+
+```text
+bronze_dlq_rate
+
+invalid_identity_rate
+
+unsupported_event_rate
+
+silver_late_rate
+
+gold_too_late_rate
+
+invalid_gold_feature_rate
+```
+
+Các tỷ lệ này có thể báo hiệu data issue ngay cả khi Flink vẫn RUNNING.
+
+---
+
+## Consumer lag commands
+
+Silver:
+
+```bash
+docker compose exec -T kafka \
+  /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:29092 \
+  --describe \
+  --group flink-silver-v1
+```
+
+Gold:
+
+```bash
+docker compose exec -T kafka \
+  /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:29092 \
+  --describe \
+  --group flink-gold-v1
+```
+
+---
+
+# 22. Mức độ sẵn sàng Production
+
+Docker Compose hiện tại phục vụ:
+
+```text
+local development
+integration testing
+controlled replay
+pipeline validation
+```
+
+Không nên coi topology local hiện tại là production HA.
+
+---
+
+## Local topology hiện tại
+
+```text
+Kafka brokers             = 1
+Kafka replication factor  = 1
+
+Flink JobManager          = 1
+TaskManagers              = 2
+
+Checkpoint storage        = local filesystem
+Savepoint storage         = local filesystem
+```
+
+---
+
+## Production deployment thường cần
+
+### Kafka
+
+```text
+multiple brokers
+replication factor > 1
+durable storage
+broker monitoring
+capacity planning
+failure tolerance
+```
+
+---
+
+### Flink
+
+```text
+High Availability JobManager
+multiple TaskManagers
+durable checkpoint storage
+durable savepoint storage
+resource isolation
+automatic restart
+production-grade observability
+```
+
+---
+
+### Durable State
+
+Production không nên phụ thuộc vào state nằm hoàn toàn trên filesystem của một máy local.
+
+Checkpoint/savepoint nên đặt trên durable/shared storage phù hợp với môi trường triển khai.
+
+---
+
+### Observability
+
+Production cần tích hợp với hệ thống:
+
+```text
+Centralized logging
+Metrics
+Dashboard
+Alert
+Incident management
+Consumer lag monitoring
+Checkpoint alerting
+Data-quality alerting
+```
+
+---
+
+# 23. Bảo mật và Data Governance
+
+Pipeline xử lý các identifier nhạy cảm như:
+
+```text
+IMSI
+MSISDN
+MTMSI
+IMEISV
+```
+
+Trong production nên áp dụng:
+
+```text
+least privilege
+secret management
+network access control
+encryption in transit
+audit logging
+data retention policy
+access logging
+identifier masking
+controlled production-data access
+```
+
+Không nên log đầy đủ subscriber identifier ở mức INFO nếu không thật sự cần thiết.
+
+Training data cũng phải tuân thủ các rule quản trị dữ liệu tương tự dữ liệu online.
+
+---
+
+# 24. Quản lý thay đổi
+
+Một số thay đổi phải được xem là architecture/model contract change, không phải chỉnh config thông thường.
+
+---
+
+## Stateful Flink changes
+
+High-risk:
+
+```text
+đổi operator UID
+đổi keyBy
+đổi state type
+đổi serializer
+đổi dedup key
+đổi TTL semantics
+```
+
+Các thay đổi này cần kế hoạch:
+
+```text
+migration
+savepoint compatibility
+hoặc clean replay
+```
+
+---
+
+## Event-time changes
+
+High-risk:
+
+```text
+watermark tolerance
+watermark alignment max drift
+idleness
+Gold reorder tolerance
+Gold idle flush
+```
+
+Các thay đổi này có thể làm thay đổi:
+
+```text
+late rate
+event ordering
+sequence count
+model input
+```
+
+Phải regression test bằng baseline.
+
+---
+
+## Model feature changes
+
+High-risk:
+
+```text
+feature order
+vocabulary
+category ID
+normalization
+sequence length
+stride
+```
+
+Bắt buộc tạo:
+
+```text
+feature-version mới
+```
+
+và train lại model.
+
+---
+
+## Kafka changes
+
+High-risk:
+
+```text
+topic name
+partition count
+message key
+consumer group
+transactional prefix
+```
+
+Vì có thể ảnh hưởng:
+
+```text
+ordering
+state
+replay
+exactly-once
+```
+
+---
+
+# 25. Cấu trúc Repository
 
 ```text
 network-anomaly-detection/
 │
-├── README.md
-├── .env.example
-├── .gitignore
-├── docker-compose.yml
-│
 ├── config/
-│   ├── kafka/
-│   │   └── topics.yaml
-│   ├── flink/
-│   ├── nifi/
-│   └── nwdaf/
+│   └── kafka/
+│       └── topics.yaml
+│
+├── data/
+│
+├── docs/
 │
 ├── flink-preprocess/
 │   ├── pom.xml
 │   └── src/
 │       ├── main/
-│       │   ├── java/com/network/preprocess/
-│       │   │   ├── bronze/
-│       │   │   ├── silver/
-│       │   │   ├── gold/
-│       │   │   ├── config/
-│       │   │   ├── runtime/
-│       │   │   ├── source/
-│       │   │   ├── sink/
-│       │   │   ├── parser/
-│       │   │   ├── operator/
-│       │   │   └── model/
-│       │   │
+│       │   ├── java/
 │       │   └── resources/
 │       │       └── application.yaml
-│       │
 │       └── test/
 │
+├── inference-service/
+│
 ├── log-producer/
-│   ├── pom.xml
-│   └── src/
+│
+├── nifi/
+│
+├── nwdaf-adapter/
+│
+├── runtime/
+│   └── flink/
+│       ├── checkpoints/
+│       ├── savepoints/
+│       ├── logs/
+│       └── usrlib/
+│
+├── schemas/
 │
 ├── scripts/
-│   ├── start.sh
-│   ├── stop.sh
-│   ├── create-topics.sh
-│   ├── build-flink-job.sh
-│   ├── submit-flink-job.sh
-│   ├── create-gold-smoke-data.sh
-│   └── test-pipeline.sh
 │
-├── data/
-│   └── smoke-gold/
+├── tests/
 │
-└── runtime/
-    └── flink/
-        ├── checkpoints/
-        ├── savepoints/
-        ├── logs/
-        └── usrlib/
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
 
-## 23. Development rules
+# Các bất biến vận hành quan trọng
 
-### Rule 1 — Kafka boundaries are contracts
+## Accounting
 
-Không thay đổi schema giữa:
-
-```text
-Raw → Bronze
-Bronze → Silver
-Silver → Gold
-```
-
-mà không xem xét backward compatibility.
-
-### Rule 2 — Stable UID
-
-Không thay `.uid(...)` của stateful operator nếu vẫn cần restore state cũ.
-
-### Rule 3 — Feature contract versioning
-
-Nếu tensor contract thay đổi, phải tăng `feature-version` và retrain model.
-
-### Rule 4 — Không commit runtime state
-
-Không commit:
+Silver phải đảm bảo về mặt logic:
 
 ```text
-checkpoint
-savepoint
-Flink logs
-deployed JAR
-restore manifest
-generated smoke data
+Bronze input
+≈
+Silver main
++
+invalid identity
++
+unsupported event
++
+Silver late
 ```
 
-### Rule 5 — Không xóa state tùy tiện
-
-Checkpoint và savepoint local có thể thuộc một Flink Job ID cũ nhưng vẫn hữu ích cho recovery/debug.
-
-Chỉ cleanup khi xác định rõ state đó không còn cần thiết.
-
-### Rule 6 — State-safe shutdown
-
-Đối với pipeline đang RUNNING:
-
-```text
-./scripts/stop.sh
-```
-
-thay vì stop container trực tiếp.
+Không được có record biến mất mà không có side output.
 
 ---
 
-## 24. Validated pipeline status
+## UE isolation
 
-Pipeline preprocessing hiện đã được kiểm tra với:
+Một Gold sequence chỉ được chứa event của:
 
 ```text
-Bronze runtime                PASS
-Silver runtime                PASS
-Gold runtime                  PASS
-
-Checkpoint                    PASS
-Exactly-once Kafka sinks      PASS
-
-Bronze savepoint restore      PASS
-Silver savepoint restore      PASS
-Gold savepoint restore        PASS
-
-Automated stop                PASS
-Automated restore             PASS
-
-End-to-end smoke test         PASS
-
-Raw → Bronze → Silver → Gold  PASS
-
-Gold model contract:
-x_cat[32][4]                  PASS
-x_num[32][2]                  PASS
+một ueKey duy nhất
 ```
 
-Phần được xác nhận ở đây là preprocessing pipeline đến `gold.ue.sequence`.
+Không được trộn nhiều UE trong cùng sequence.
 
-Inference Service và NWDAF Adapter là downstream components riêng và không nằm trong end-to-end preprocessing smoke test hiện tại.
+---
+
+## Model shape
+
+Với:
+
+```text
+gold-ue-sequence-feature-v2
+```
+
+shape phải luôn là:
+
+```text
+x_cat[32][4]
+x_num[32][2]
+```
+
+---
+
+## Event ordering
+
+Kafka partition progress không phải UE timeline.
+
+Gold ordering phải luôn theo:
+
+```text
+ueKey
+```
+
+
