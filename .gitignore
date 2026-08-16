@@ -147,6 +147,7 @@ nifi/database_repository/
 
 data/raw/*
 data/export/*
+data/runtime-smoke-01/*
 
 # Smoke data được generate lại bởi script.
 data/smoke-gold/*
@@ -159,3 +160,6 @@ data/smoke-gold/*
 
 *.log
 *.out
+
+#=====================================================
+.venv-inference

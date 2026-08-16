@@ -1,0 +1,1781 @@
+{
+  "schema_version": "gold-sequence-v1",
+  "feature_version": "gold-ue-sequence-feature-v2",
+  "sample_id": "3bb4de38b36280ae12254abdfbb2632251bc46169dbe9a92a061f533ccf11063",
+  "ue_key": "452040927595025",
+  "imsi": "452040927595025",
+  "window_start_event_time": "2024-06-26T07:00:34.824Z",
+  "window_end_event_time": "2024-06-26T07:01:12.299Z",
+  "sequence_length": 32,
+  "stride": 8,
+  "model_input": {
+    "x_cat": [
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        6,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        3,
+        0,
+        0
+      ]
+    ],
+    "x_num": [
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.30518892,
+        0.0
+      ],
+      [
+        0.29698133,
+        0.0
+      ],
+      [
+        0.34461296,
+        0.0
+      ],
+      [
+        0.29552186,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.29096523,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.33302677,
+        0.0
+      ],
+      [
+        0.2809288,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.31258783,
+        0.0
+      ],
+      [
+        0.29841304,
+        0.0
+      ],
+      [
+        0.29698133,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.30388173,
+        0.0
+      ],
+      [
+        0.2809288,
+        0.0
+      ],
+      [
+        0.29403347,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27535874,
+        0.0
+      ],
+      [
+        0.27726164,
+        0.0
+      ],
+      [
+        0.27911758,
+        0.0
+      ],
+      [
+        0.32935962,
+        0.0
+      ]
+    ]
+  },
+  "evidence": {
+    "events": [
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385234824,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:00:34.824Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "348c2de140cf367fef12f62fd704a9f0e14554d967c3e70aa2b2b474aab42df4"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385235885,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:35.885Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "83d99e0c72bf8916ef0bb9283e319754112a324c95903177430dac4de6804343"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385237006,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:37.006Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "cedb0ba24c30f6456efb9d58296c8992509094c9c981d1913e89be44063f5366"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385238006,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:00:38.006Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "b9908bf9b23950fe03d14007411214d7e6f50c09d54bfba39b3fe57e63c40b70"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385239064,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:39.064Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "1eb125a77186d8723723a920fbf35cc9b6ea11011564d91c6e232a828f3b7a8f"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 57,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385240135,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "57",
+          "event_time": "2024-06-26T07:00:40.135Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443074",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "eed5028521aa59611a1c2a8365e3caf920eeca1d94e2db0735662d2ceee3ff8c"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 51,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385242467,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "51",
+          "event_time": "2024-06-26T07:00:42.467Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443074",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "6a46dfb14c3a9794c4b71b7d6f7326ff98ef32baaf62051062668ba6d5458a85"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 97,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385243617,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "97",
+          "event_time": "2024-06-26T07:00:43.617Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "0f744bf923481c74b29c1d974f188530523daec68ad8c0bcfa56d840692992de"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 50,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385244723,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "50",
+          "event_time": "2024-06-26T07:00:44.723Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "94eff686341fabcd26bdee56486f7ca1208b79cc0562bb4914ac11b1820db079"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385245865,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:00:45.865Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "1b8ab3263273bbf81d14584e85160bd92142c42d5feddafbe47acb59e4313b1c"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 47,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385246990,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "47",
+          "event_time": "2024-06-26T07:00:46.990Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "597f1eced7748942f64730951f72fe69d5a07fdab1aa424bf9429da9e98cfeb2"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385248010,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:48.010Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "b632038fbfd12424d6ace06a14d151cfc44271bc76e1f2b646d424e795e6f6aa"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 83,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385249254,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "83",
+          "event_time": "2024-06-26T07:00:49.254Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443074",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "de3adbb541bf6153ee08849623e0651f7eabd8bed8a155b10a48d427c64a4b46"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 41,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385251342,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "41",
+          "event_time": "2024-06-26T07:00:51.342Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "bc0a09041546f216129f86af9aae4488a82ec784bfbf579a14a6d296386d4bf6"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385252366,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:52.366Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "9e947b04bc46115f92c89ed900f2fd35930fb904a238d4fe823504e64b71ce77"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385253529,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:00:53.529Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "65250fec4e106915a34f857778e1933d2bc7926ed1f59ac6b7ee75cfc7eeed93"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 63,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385255349,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "63",
+          "event_time": "2024-06-26T07:00:55.349Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "f00a7ce0c996209276614cd7bec14b3fb191fee3273ede678364491f39cedc4f"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 52,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385256596,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "52",
+          "event_time": "2024-06-26T07:00:56.596Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61560065",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "4f584765b6026b95ccaf121a629aee327a0e8e39cf9aea3afa6633c148cec06d"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_handover",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 51,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385256994,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_handover",
+          "event_name": "LTE Handover",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "51",
+          "event_time": "2024-06-26T07:00:56.994Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "e33f20024dad3b29d088600dcb9b653051ce23682308302e573869305804efab"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385258228,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:00:58.228Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "01c47434b5c529013bf6f2d52ecb7a594ec1fcb35f60eff01bb321d6d1152bbc"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385259304,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:00:59.304Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "7a68612b5095fec9f0c4418dd653f5abf618dba61a206c71dfbab43accb1d973"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385260329,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:01:00.329Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "93af6b13c79bb53f32faa1a58d414f34c69bbaf41fab0500b995160c394b70da"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385261446,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:01:01.446Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "578fc083de5a31659b7599c63a8dc67e8b4bafe88e96e86ac36a1b1c7f961fbf"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385262551,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:01:02.551Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "9837b7244a7f1c50a4bdc38a9e1195552990e1b7375cc808cb30e1c49edb3ecd"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 56,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385263706,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "56",
+          "event_time": "2024-06-26T07:01:03.706Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "ab6c563cfbfd4c76e41782e79fd7c7b8eba26130ed53100513d59907ced0ff01"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 41,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385264759,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "41",
+          "event_time": "2024-06-26T07:01:04.759Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "863440bea3314f3fcb996819a5d5cc5e4ea3400f578fc5098d26636667553c26"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 49,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385265909,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "49",
+          "event_time": "2024-06-26T07:01:05.909Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "e542f9948c8c74ca463ccb801d61f0d630fe9ee7b9beac34501fe05a1339066f"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385267486,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:01:07.486Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "6186effb04107ccfa584f57300b839ba04f72869933c9128ac314a63a1089e70"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 38,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385268528,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "38",
+          "event_time": "2024-06-26T07:01:08.528Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "11a3e0c376ea0e5dba20fa3bfaf488ccc486bd193b8a3360291639d82410d652"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 39,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385270106,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "39",
+          "event_time": "2024-06-26T07:01:10.106Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "097590c9e59dfc2a1005d2f8f2dfe901ca1f1f57efc237af83701e88478282dd"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 40,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385271167,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "40",
+          "event_time": "2024-06-26T07:01:11.167Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "c4fd65919c32f3fc4b04fde1589cc0cbb992e2d6b8d2ed197918fba003f0e93a"
+      },
+      {
+        "ue_key": "452040927595025",
+        "imsi": "452040927595025",
+        "event_id": "l_service_request",
+        "event_result": "success",
+        "normalized_cause_code": "",
+        "sub_cause_code": "",
+        "duration_ms": 79,
+        "request_retries": 0,
+        "event_code": 0,
+        "event_result_code": 0,
+        "event_time_epoch_ms": 1719385272299,
+        "feature_source_fields": {
+          "CAUSE_CODE": "",
+          "SUB_CAUSE_CODE": ""
+        },
+        "display_fields": {
+          "event_id": "l_service_request",
+          "event_name": "LTE Service Request",
+          "event_result": "success",
+          "event_result_label": "Success",
+          "duration_ms": "79",
+          "event_time": "2024-06-26T07:01:12.299Z",
+          "msisdn": "84374703119",
+          "imsi": "452040927595025",
+          "mtmsi": "3468524820",
+          "imeisv": "861997067800420",
+          "mmegi": "32772",
+          "mmec": "76",
+          "sub_cause_code": "",
+          "msc": "MSPD27",
+          "tac": "12411",
+          "eci": "61443075",
+          "sgw": "10.202.5.49",
+          "pdn_pgw": "125.235.64.129"
+        },
+        "quality_fields": {
+          "identity_resolution_source": "direct_imsi",
+          "event_id_changed": "false",
+          "event_result_changed": "false",
+          "event_result_recognized": "true",
+          "warnings": ""
+        },
+        "source_order_key": "1bb39ff8f2e4b1fa1805dd945d34cbfe65d87071e582c9db9f9f526ecb034b28"
+      }
+    ]
+  }
+}

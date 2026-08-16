@@ -1,0 +1,28 @@
+{
+  "sample_id": "3bb4de38b36280ae12254abdfbb2632251bc46169dbe9a92a061f533ccf11063",
+  "ue_key": "452040927595025",
+  "start_time": "2024-06-26T07:00:34.824Z",
+  "end_time": "2024-06-26T07:01:12.299Z",
+  "model": "MixedTransformer",
+  "selected_seed": 2026,
+  "score_policy": "single_validation_selected_seed_raw_score",
+  "raw_score": 0.25286391377449036,
+  "conformal_p_value": 0.6835740678535438,
+  "anomaly_score": 0.3164259321464562,
+  "alpha": 0.025,
+  "is_anomaly": false,
+  "top_timestep_indices": [
+    18,
+    9,
+    8,
+    28,
+    12
+  ],
+  "top_timestep_raw_contributions": [
+    0.4721154272556305,
+    0.1541873663663864,
+    0.13228899240493774,
+    0.09835744649171829,
+    0.09597929567098618
+  ]
+}
