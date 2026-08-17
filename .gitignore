@@ -149,6 +149,7 @@ data/raw/*
 data/export/*
 data/runtime-smoke-01/*
 data/runtime-three-model-smoke/*
+data/runtime-replay-current/*
 
 # Smoke data được generate lại bởi script.
 data/smoke-gold/*
