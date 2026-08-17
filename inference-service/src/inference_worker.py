@@ -6,12 +6,12 @@ import os
 import signal
 import sys
 
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 from confluent_kafka import Consumer, Producer
 
-# File này là service chính 
 
 # ============================================================
 # PROJECT PATH
@@ -30,22 +30,9 @@ MODEL_DIR = (
     / "production"
 )
 
-METADATA_FILE = (
-    MODEL_DIR
-    / "artifact_metadata.json"
-)
-
 
 # ============================================================
 # IMPORT PRODUCTION PREDICTOR
-# ============================================================
-#
-# predictor.py của bundle import model_def.py cùng folder.
-#
-# Vì vậy thêm production bundle vào Python path.
-#
-# Không copy model code sang src/.
-# Bundle production là source of truth.
 # ============================================================
 
 sys.path.insert(
@@ -78,15 +65,6 @@ LOGGER = logging.getLogger(
 # ============================================================
 # KAFKA CONFIG
 # ============================================================
-#
-# Worker chạy trực tiếp trong WSL.
-#
-# Kafka Docker expose ra host:
-#
-#     localhost:9092
-#
-# kafka:29092 chỉ dùng bên trong Docker network.
-# ============================================================
 
 BOOTSTRAP_SERVERS = os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS",
@@ -105,15 +83,15 @@ OUTPUT_TOPIC = os.getenv(
 
 
 # ============================================================
-# RUNTIME CONSUMER GROUP
+# CONSUMER GROUP
 # ============================================================
 #
-# Group này KHÔNG được trùng với:
+# Giữ nguyên group runtime cũ.
 #
-#     flink-gold-v1
-#     gold-contract-probe-v1
+# Vì group này đã có committed offsets từ worker trước,
+# worker mới sẽ tiếp tục từ đúng vị trí đã xử lý.
 #
-# Đây là consumer group riêng của production inference.
+# Không dùng group mới để tránh đọc lại Gold runtime cũ.
 # ============================================================
 
 CONSUMER_GROUP = os.getenv(
@@ -122,9 +100,9 @@ CONSUMER_GROUP = os.getenv(
 )
 
 
-EXPECTED_FEATURE_VERSION = (
-    "gold-ue-sequence-feature-v2"
-)
+# ============================================================
+# GOLD CONTRACT
+# ============================================================
 
 EXPECTED_SEQUENCE_LENGTH = 32
 
@@ -143,13 +121,7 @@ RUNNING = True
 def handle_shutdown(
     signum,
     frame,
-):
-    """
-    Ctrl+C không kill process giữa lúc đang produce.
-
-    Chỉ đánh dấu vòng lặp dừng.
-    finally sẽ close Kafka cleanly.
-    """
+) -> None:
 
     global RUNNING
 
@@ -176,15 +148,12 @@ signal.signal(
 # ============================================================
 
 def utc_now() -> str:
-    """
-    Processing/inference timestamp.
-
-    Đây không phải LTE EVENT_TIME.
-    """
 
     return (
         datetime
-        .now(timezone.utc)
+        .now(
+            timezone.utc
+        )
         .isoformat()
         .replace(
             "+00:00",
@@ -197,14 +166,173 @@ def require(
     condition: bool,
     message: str,
 ) -> None:
-    """
-    Fail-fast khi contract không đúng.
-    """
 
     if not condition:
+
         raise ValueError(
             message
         )
+
+
+# ============================================================
+# LOAD METADATA
+# ============================================================
+
+def load_metadata() -> dict:
+
+    metadata_file = (
+        MODEL_DIR
+        / "artifact_metadata.json"
+    )
+
+
+    if not metadata_file.exists():
+
+        raise FileNotFoundError(
+            (
+                "Production metadata not found: "
+                f"{metadata_file}"
+            )
+        )
+
+
+    return json.loads(
+        metadata_file.read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+# ============================================================
+# LOAD ALL MODELS
+# ============================================================
+
+def load_predictors(
+) -> tuple[
+    dict[str, AnomalyPredictor],
+    list[str],
+]:
+    """
+    Load tất cả model trong production bundle một lần.
+
+    Bundle hiện tại:
+
+        IsolationForest
+        MixedTransformer
+        MFMT
+
+    Không load model lại cho từng Gold window.
+    """
+
+    metadata = load_metadata()
+
+
+    deployment = (
+        metadata[
+            "deployment"
+        ]
+    )
+
+
+    models_metadata = (
+        metadata[
+            "models"
+        ]
+    )
+
+
+    available_models = list(
+        deployment.get(
+            "available_models",
+            models_metadata.keys(),
+        )
+    )
+
+
+    if not available_models:
+
+        raise RuntimeError(
+            (
+                "No model found in "
+                "production bundle"
+            )
+        )
+
+
+    LOGGER.info(
+        (
+            "Production bundle | "
+            "models=%s | "
+            "default=%s"
+        ),
+        available_models,
+        deployment.get(
+            "default_model"
+        ),
+    )
+
+
+    predictors: dict[
+        str,
+        AnomalyPredictor,
+    ] = {}
+
+
+    for model_name in available_models:
+
+        LOGGER.info(
+            "Loading model=%s ...",
+            model_name,
+        )
+
+
+        predictor = (
+            AnomalyPredictor(
+                MODEL_DIR,
+                model_name=model_name,
+            )
+        )
+
+
+        predictors[
+            model_name
+        ] = predictor
+
+
+        LOGGER.info(
+            (
+                "MODEL READY | "
+                "model=%s | "
+                "display=%s | "
+                "seed=%s | "
+                "alpha=%s | "
+                "score_policy=%s | "
+                "forward_passes=%s"
+            ),
+            predictor.model_name,
+            predictor.model_display_name,
+            predictor.selected_seed,
+            predictor.alpha,
+            predictor.score_policy,
+            predictor.forward_passes_per_window,
+        )
+
+
+    LOGGER.info(
+        (
+            "ALL MODELS READY | "
+            "count=%d"
+        ),
+        len(
+            predictors
+        ),
+    )
+
+
+    return (
+        predictors,
+        available_models,
+    )
 
 
 # ============================================================
@@ -213,13 +341,14 @@ def require(
 
 def validate_gold_record(
     record: dict,
-    predictor: AnomalyPredictor,
+    contract_predictor: AnomalyPredictor,
 ) -> None:
     """
-    Kiểm tra những điều quan trọng nhất trước inference.
+    Validate Gold contract một lần trước khi đưa
+    cùng Gold window cho cả ba model.
 
-    Predictor cũng có validation riêng,
-    nhưng worker kiểm tra sớm để lỗi dễ hiểu hơn.
+    Cả ba model dùng cùng:
+        gold-ue-sequence-feature-v2
     """
 
     require(
@@ -227,7 +356,10 @@ def validate_gold_record(
             record,
             dict,
         ),
-        "Gold value must be a JSON object",
+        (
+            "Gold value must be "
+            "a JSON object"
+        ),
     )
 
 
@@ -241,8 +373,9 @@ def validate_gold_record(
         )
     )
 
+
     model_feature_version = (
-        predictor
+        contract_predictor
         .meta[
             "feature_contract"
         ][
@@ -253,9 +386,10 @@ def validate_gold_record(
 
     require(
         actual_feature_version
-        == model_feature_version,
+        ==
+        model_feature_version,
         (
-            "Gold/model feature contract mismatch: "
+            "Gold/model feature mismatch: "
             f"Gold={actual_feature_version!r}, "
             f"Model={model_feature_version!r}"
         ),
@@ -263,14 +397,15 @@ def validate_gold_record(
 
 
     # --------------------------------------------------------
-    # WINDOW
+    # SEQUENCE LENGTH
     # --------------------------------------------------------
 
     require(
         record.get(
             "sequence_length"
         )
-        == EXPECTED_SEQUENCE_LENGTH,
+        ==
+        EXPECTED_SEQUENCE_LENGTH,
         (
             "Unexpected sequence_length: "
             f"{record.get('sequence_length')!r}"
@@ -282,8 +417,10 @@ def validate_gold_record(
     # MODEL INPUT
     # --------------------------------------------------------
 
-    model_input = record.get(
-        "model_input"
+    model_input = (
+        record.get(
+            "model_input"
+        )
     )
 
 
@@ -296,12 +433,16 @@ def validate_gold_record(
     )
 
 
-    x_cat = model_input.get(
-        "x_cat"
+    x_cat = (
+        model_input.get(
+            "x_cat"
+        )
     )
 
-    x_num = model_input.get(
-        "x_num"
+    x_num = (
+        model_input.get(
+            "x_num"
+        )
     )
 
 
@@ -311,10 +452,13 @@ def validate_gold_record(
             list,
         )
         and
-        len(x_cat)
-        == EXPECTED_SEQUENCE_LENGTH,
+        len(
+            x_cat
+        )
+        ==
+        EXPECTED_SEQUENCE_LENGTH,
         (
-            "x_cat must have "
+            "x_cat must contain "
             f"{EXPECTED_SEQUENCE_LENGTH} timesteps"
         ),
     )
@@ -326,16 +470,22 @@ def validate_gold_record(
             list,
         )
         and
-        len(x_num)
-        == EXPECTED_SEQUENCE_LENGTH,
+        len(
+            x_num
+        )
+        ==
+        EXPECTED_SEQUENCE_LENGTH,
         (
-            "x_num must have "
+            "x_num must contain "
             f"{EXPECTED_SEQUENCE_LENGTH} timesteps"
         ),
     )
 
 
-    for index, row in enumerate(
+    for (
+        timestep,
+        row,
+    ) in enumerate(
         x_cat
     ):
 
@@ -345,16 +495,22 @@ def validate_gold_record(
                 list,
             )
             and
-            len(row)
-            == EXPECTED_CAT_FEATURE_COUNT,
+            len(
+                row
+            )
+            ==
+            EXPECTED_CAT_FEATURE_COUNT,
             (
-                "Invalid x_cat shape at "
-                f"timestep={index}"
+                "Invalid x_cat shape "
+                f"at timestep={timestep}"
             ),
         )
 
 
-    for index, row in enumerate(
+    for (
+        timestep,
+        row,
+    ) in enumerate(
         x_num
     ):
 
@@ -364,17 +520,20 @@ def validate_gold_record(
                 list,
             )
             and
-            len(row)
-            == EXPECTED_NUM_FEATURE_COUNT,
+            len(
+                row
+            )
+            ==
+            EXPECTED_NUM_FEATURE_COUNT,
             (
-                "Invalid x_num shape at "
-                f"timestep={index}"
+                "Invalid x_num shape "
+                f"at timestep={timestep}"
             ),
         )
 
 
 # ============================================================
-# TOP EVIDENCE
+# EXTRACT TOP EVIDENCE
 # ============================================================
 
 def extract_top_evidence(
@@ -382,22 +541,11 @@ def extract_top_evidence(
     prediction: dict,
 ) -> list[dict]:
     """
-    Predictor trả về các timestep có reconstruction contribution cao.
+    MixedTransformer và MFMT có:
+        top_timestep_indices
 
-    Ví dụ:
-
-        top_timestep_indices = [12, 15, 7, ...]
-
-    Gold giữ 32 evidence event.
-
-    Ta nối:
-
-        timestep 12
-            ↓
-        evidence.events[12]
-
-    để Streamlit sau này có thể hiển thị
-    event nào đóng góp mạnh vào anomaly score.
+    IsolationForest không có timestep-level
+    reconstruction contribution nên trả [].
     """
 
     evidence = (
@@ -412,7 +560,7 @@ def extract_top_evidence(
     events = (
         evidence.get(
             "events",
-            []
+            [],
         )
         or []
     )
@@ -439,22 +587,30 @@ def extract_top_evidence(
     output = []
 
 
-    for rank, timestep in enumerate(
+    for (
+        rank,
+        timestep,
+    ) in enumerate(
         indices
     ):
+
 
         if not isinstance(
             timestep,
             int,
         ):
+
             continue
 
 
         if (
             timestep < 0
             or
-            timestep >= len(events)
+            timestep >= len(
+                events
+            )
         ):
+
             continue
 
 
@@ -492,26 +648,16 @@ def extract_top_evidence(
 
 
 # ============================================================
-# OUTPUT MESSAGE
+# BUILD OUTPUT
 # ============================================================
 
 def build_output_record(
     gold_record: dict,
     prediction: dict,
-    predictor: AnomalyPredictor,
     kafka_message,
 ) -> dict:
     """
-    Tạo contract output cho anomaly-predictions.
-
-    File JSON Schema trong repo hiện chưa được định nghĩa,
-    nên worker ghi rõ:
-
-        prediction_schema_version =
-            anomaly-prediction-v1
-
-    Sau khi pipeline chạy ổn,
-    ta sẽ formalize schema này.
+    Chuyển model prediction thành Kafka output contract.
     """
 
     sample_id = str(
@@ -520,11 +666,13 @@ def build_output_record(
         ]
     )
 
+
     model_name = str(
         prediction[
             "model"
         ]
     )
+
 
     selected_seed = (
         prediction.get(
@@ -534,23 +682,16 @@ def build_output_record(
 
 
     # --------------------------------------------------------
-    # DETERMINISTIC PREDICTION ID
+    # DETERMINISTIC ID
     # --------------------------------------------------------
     #
-    # Worker hiện dùng delivery kiểu at-least-once.
+    # Cùng sample nhưng ba model:
     #
-    # Nếu crash đúng lúc:
+    # sample-X::IsolationForest::None
+    # sample-X::MixedTransformer::123
+    # sample-X::MFMT::3407
     #
-    # produce prediction thành công
-    #     ↓
-    # chưa commit Gold offset
-    #     ↓
-    # restart
-    #     ↓
-    # Gold message được đọc lại
-    #
-    # prediction_id deterministic giúp dashboard
-    # deduplicate cùng một prediction.
+    # nên Streamlit có thể deduplicate độc lập.
     # --------------------------------------------------------
 
     prediction_id = (
@@ -560,20 +701,10 @@ def build_output_record(
     )
 
 
-    deployment = (
-        predictor
-        .meta
-        .get(
-            "deployment",
-            {},
-        )
-    )
-
-
     return {
 
         # ====================================================
-        # OUTPUT CONTRACT
+        # CONTRACT
         # ====================================================
 
         "prediction_schema_version":
@@ -612,7 +743,7 @@ def build_output_record(
 
 
         # ====================================================
-        # WINDOW
+        # GOLD WINDOW
         # ====================================================
 
         "window_start_event_time":
@@ -637,26 +768,20 @@ def build_output_record(
 
 
         # ====================================================
-        # MODEL
+        # MODEL IDENTITY
         # ====================================================
 
         "model":
-            prediction[
-                "model"
-            ],
+            model_name,
 
         "model_display_name":
             prediction.get(
                 "model_display_name",
-                prediction[
-                    "model"
-                ],
+                model_name,
             ),
 
         "selected_seed":
-            prediction.get(
-                "selected_seed"
-            ),
+            selected_seed,
 
         "score_policy":
             prediction.get(
@@ -664,14 +789,16 @@ def build_output_record(
             ),
 
         "forward_passes_per_window":
-            prediction.get(
-                "forward_passes_per_window",
-                1,
+            int(
+                prediction.get(
+                    "forward_passes_per_window",
+                    0,
+                )
             ),
 
 
         # ====================================================
-        # ANOMALY RESULT
+        # SCORE
         # ====================================================
 
         "raw_score":
@@ -688,9 +815,6 @@ def build_output_record(
                 ]
             ),
 
-        # anomaly_score = 1 - conformal p-value
-        #
-        # Đây KHÔNG phải probability.
         "anomaly_score":
             float(
                 prediction[
@@ -698,6 +822,7 @@ def build_output_record(
                 ]
             ),
 
+        # Không phải probability.
         "anomaly_score_is_probability":
             False,
 
@@ -708,6 +833,12 @@ def build_output_record(
                 ]
             ),
 
+        # Đây là decision gốc của production model:
+        #
+        # p <= alpha
+        #
+        # Dashboard sau này có thể tạo thêm threshold
+        # hiển thị riêng mà không sửa field này.
         "is_anomaly":
             bool(
                 prediction[
@@ -717,7 +848,7 @@ def build_output_record(
 
 
         # ====================================================
-        # EXPLANATION / EVIDENCE
+        # EXPLANATION
         # ====================================================
 
         "top_timestep_indices":
@@ -773,45 +904,6 @@ def build_output_record(
 # ============================================================
 
 def create_consumer() -> Consumer:
-    """
-    Runtime consumer Gold.
-
-    auto.offset.reset = latest
-    --------------------------
-
-    Đây là CHỦ Ý cho runtime demo.
-
-    inference-runtime-v1 chưa có committed offset.
-    Khi worker start trước data/runtime:
-
-        Gold development records
-               ↑
-             skip
-
-        worker starts here
-               ↓
-
-        Gold runtime records
-               ↓
-             consume
-
-
-    enable.auto.commit = False
-    --------------------------
-
-    Chỉ commit Gold message sau khi:
-
-        inference thành công
-            +
-        prediction đã gửi Kafka thành công.
-
-
-    isolation.level = read_committed
-    --------------------------------
-
-    Gold Flink sink dùng Kafka transaction,
-    nên chỉ đọc transaction đã commit.
-    """
 
     return Consumer(
         {
@@ -821,6 +913,10 @@ def create_consumer() -> Consumer:
             "group.id":
                 CONSUMER_GROUP,
 
+            # Chỉ dùng khi group chưa có committed offset.
+            #
+            # Group inference-runtime-v1 hiện đã có offset,
+            # nên worker tiếp tục từ vị trí cũ.
             "auto.offset.reset":
                 "latest",
 
@@ -841,15 +937,6 @@ def create_consumer() -> Consumer:
 # ============================================================
 
 def create_producer() -> Producer:
-    """
-    Producer gửi prediction sang anomaly-predictions.
-
-    enable.idempotence = True:
-        hỗ trợ producer retry an toàn hơn.
-
-    acks = all:
-        broker xác nhận sau khi ghi theo durability policy.
-    """
 
     return Producer(
         {
@@ -869,7 +956,7 @@ def create_producer() -> Producer:
 
 
 # ============================================================
-# SEND OUTPUT
+# SEND ONE PREDICTION
 # ============================================================
 
 def send_prediction(
@@ -877,18 +964,12 @@ def send_prediction(
     record: dict,
 ) -> None:
     """
-    Gửi một anomaly prediction.
+    Gửi một model prediction.
 
-    Ở demo này ta flush mỗi prediction.
+    Hiện flush từng prediction để ưu tiên correctness,
+    phù hợp demo.
 
-    Ưu điểm:
-        dễ kiểm chứng correctness.
-
-    Nhược:
-        throughput thấp hơn batching.
-
-    Sau khi demo chạy đúng,
-    mới tối ưu batching.
+    Sau này có thể batch nếu cần throughput cao hơn.
     """
 
     payload = json.dumps(
@@ -912,6 +993,7 @@ def send_prediction(
         topic=
             OUTPUT_TOPIC,
 
+        # Giữ cùng UE vào cùng partition.
         key=
             ue_key.encode(
                 "utf-8"
@@ -924,7 +1006,6 @@ def send_prediction(
     )
 
 
-    # Đợi message thực sự được gửi khỏi local queue.
     remaining = producer.flush(
         timeout=10.0
     )
@@ -942,13 +1023,49 @@ def send_prediction(
 
 
 # ============================================================
+# COMMIT GOLD OFFSET
+# ============================================================
+
+def commit_gold_message(
+    consumer: Consumer,
+    message,
+) -> None:
+    """
+    Chỉ gọi sau khi CẢ BA prediction đã produce thành công.
+    """
+
+    committed = consumer.commit(
+        message=
+            message,
+
+        asynchronous=
+            False,
+    )
+
+
+    if committed:
+
+        for partition in committed:
+
+            if partition.error:
+
+                raise RuntimeError(
+                    (
+                        "Kafka offset commit failed: "
+                        f"{partition}"
+                    )
+                )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main() -> int:
 
+
     # --------------------------------------------------------
-    # 1. MODEL DIRECTORY
+    # MODEL DIRECTORY
     # --------------------------------------------------------
 
     if not MODEL_DIR.exists():
@@ -961,131 +1078,34 @@ def main() -> int:
         )
 
 
-    # --------------------------------------------------------
-    # 2. LOAD ALL PRODUCTION MODELS
-    # --------------------------------------------------------
+    # ========================================================
+    # LOAD ALL THREE MODELS ONCE
+    # ========================================================
 
-    if not METADATA_FILE.exists():
-
-        raise FileNotFoundError(
-            f"Metadata not found: {METADATA_FILE}"
-        )
-
-
-    metadata = json.loads(
-        METADATA_FILE.read_text(
-            encoding="utf-8"
-        )
-    )
-
-
-    deployment = metadata.get(
-        "deployment",
-        {},
-    )
-
-    available_models = list(
-        deployment.get(
-            "available_models",
-            metadata.get(
-                "models",
-                {},
-            ).keys(),
-        )
-    )
-
-    if not available_models:
-
-        raise RuntimeError(
-            "Production bundle contains no models"
-        )
-
-
-    LOGGER.info(
-        "Available production models: %s",
+    (
+        predictors,
         available_models,
+    ) = load_predictors()
+
+
+    # Predictor đầu tiên chỉ dùng để validate contract.
+    contract_predictor = (
+        predictors[
+            available_models[
+                0
+            ]
+        ]
     )
 
 
-    predictors: dict[str, AnomalyPredictor] = {}
-
-    for model_name in available_models:
-
-        LOGGER.info(
-            "Loading model=%s ...",
-            model_name,
-        )
-
-        try:
-            predictor = AnomalyPredictor(
-                MODEL_DIR,
-                model_name=model_name,
-            )
-        except TypeError:
-            predictor = AnomalyPredictor(
-                MODEL_DIR
-            )
-            if model_name != predictor.model_name:
-                raise
-
-        predictors[model_name] = predictor
-
-        LOGGER.info(
-            (
-                "MODEL READY | "
-                "model=%s | "
-                "display=%s | "
-                "seed=%s | "
-                "alpha=%s | "
-                "forward_passes=%s"
-            ),
-            predictor.model_name,
-            getattr(
-                predictor,
-                "model_display_name",
-                predictor.model_name,
-            ),
-            getattr(
-                predictor,
-                "selected_seed",
-                None,
-            ),
-            getattr(
-                predictor,
-                "alpha",
-                None,
-            ),
-            getattr(
-                predictor,
-                "forward_passes_per_window",
-                1,
-            ),
-        )
-
-
-    contract_predictor = predictors[
-        available_models[0]
-    ]
-
-
-    LOGGER.info(
-        "ALL MODELS READY | count=%d",
-        len(predictors),
-    )
-
-
-    # --------------------------------------------------------
-    # 3. CREATE KAFKA CLIENTS
-    # --------------------------------------------------------
+    # ========================================================
+    # KAFKA CLIENTS
+    # ========================================================
 
     consumer = create_consumer()
 
     producer = create_producer()
 
-
-    # --------------------------------------------------------
-    # 4. SUBSCRIBE
-    # --------------------------------------------------------
 
     consumer.subscribe(
         [
@@ -1115,22 +1135,38 @@ def main() -> int:
     )
 
     LOGGER.info(
-        "Waiting for NEW runtime Gold samples..."
+        (
+            "Waiting for NEW runtime Gold samples "
+            "| scoring each window with %d models..."
+        ),
+        len(
+            available_models
+        ),
     )
 
 
-    # --------------------------------------------------------
-    # RUNTIME COUNTERS
-    # --------------------------------------------------------
+    # ========================================================
+    # COUNTERS
+    # ========================================================
 
-    processed_count = 0
+    processed_windows = 0
 
-    anomaly_count = 0
+    produced_predictions = 0
+
+
+    anomalies_by_model = defaultdict(
+        int
+    )
 
 
     try:
 
         while RUNNING:
+
+
+            # =================================================
+            # POLL GOLD
+            # =================================================
 
             message = consumer.poll(
                 timeout=1.0
@@ -1138,6 +1174,7 @@ def main() -> int:
 
 
             if message is None:
+
                 continue
 
 
@@ -1151,9 +1188,9 @@ def main() -> int:
                 )
 
 
-            # ------------------------------------------------
-            # 5. DESERIALIZE GOLD
-            # ------------------------------------------------
+            # =================================================
+            # DESERIALIZE
+            # =================================================
 
             raw_value = (
                 message
@@ -1164,31 +1201,59 @@ def main() -> int:
             )
 
 
-            gold_record = json.loads(
-                raw_value
+            gold_record = (
+                json.loads(
+                    raw_value
+                )
             )
 
 
-            # ------------------------------------------------
-            # 6. VALIDATE CONTRACT
-            # ------------------------------------------------
+            # =================================================
+            # VALIDATE GOLD ONCE
+            # =================================================
 
             validate_gold_record(
                 record=
                     gold_record,
 
-                predictor=
-                    predictor,
+                contract_predictor=
+                    contract_predictor,
             )
 
 
-            # ------------------------------------------------
-            # 7. MODEL INFERENCE - ALL MODELS FOR THE SAME GOLD WINDOW
-            # ------------------------------------------------
+            # =================================================
+            # SCORE SAME WINDOW WITH ALL MODELS
+            # =================================================
+            #
+            # QUAN TRỌNG:
+            #
+            # Không commit input offset ở giữa vòng lặp.
+            #
+            # Cả 3 model phải:
+            #
+            #     score success
+            #     +
+            #     output Kafka success
+            #
+            # rồi mới commit Gold.
+            # =================================================
 
-            outputs_for_window = []
+            window_outputs = []
 
-            for model_name, predictor in predictors.items():
+
+            for model_name in available_models:
+
+
+                predictor = (
+                    predictors[
+                        model_name
+                    ]
+                )
+
+
+                # ---------------------------------------------
+                # INFERENCE
+                # ---------------------------------------------
 
                 prediction = (
                     predictor
@@ -1196,6 +1261,11 @@ def main() -> int:
                         gold_record
                     )
                 )
+
+
+                # ---------------------------------------------
+                # OUTPUT
+                # ---------------------------------------------
 
                 output_record = (
                     build_output_record(
@@ -1205,13 +1275,15 @@ def main() -> int:
                         prediction=
                             prediction,
 
-                        predictor=
-                            predictor,
-
                         kafka_message=
                             message,
                     )
                 )
+
+
+                # ---------------------------------------------
+                # KAFKA PRODUCE
+                # ---------------------------------------------
 
                 send_prediction(
                     producer=
@@ -1221,116 +1293,144 @@ def main() -> int:
                         output_record,
                 )
 
-                outputs_for_window.append(
+
+                window_outputs.append(
                     output_record
                 )
 
 
-            # ------------------------------------------------
-            # 8. COMMIT INPUT OFFSET AFTER ALL MODELS SUCCEED
-            # ------------------------------------------------
+            # =================================================
+            # ALL THREE OUTPUTS SUCCESS
+            # =================================================
+            #
+            # Bây giờ mới được commit Gold input offset.
+            # =================================================
 
-            committed = consumer.commit(
+            commit_gold_message(
+                consumer=
+                    consumer,
+
                 message=
                     message,
-
-                asynchronous=
-                    False,
             )
 
-            if committed:
 
-                for partition in committed:
+            # =================================================
+            # COUNTERS
+            # =================================================
 
-                    if partition.error:
+            processed_windows += 1
 
-                        raise RuntimeError(
-                            (
-                                "Kafka commit failed: "
-                                f"{partition}"
-                            )
-                        )
+            produced_predictions += len(
+                window_outputs
+            )
 
 
-            # ------------------------------------------------
-            # 9. COUNTERS
-            # ------------------------------------------------
+            for output in window_outputs:
 
-            processed_count += 1
-
-            for output_record in outputs_for_window:
-
-                if output_record[
+                if output[
                     "is_anomaly"
                 ]:
 
-                    anomaly_count += 1
+                    anomalies_by_model[
+                        output[
+                            "model"
+                        ]
+                    ] += 1
 
 
-            if processed_count % 20 == 0:
+            # =================================================
+            # LOG ANOMALIES
+            # =================================================
+
+            for output in window_outputs:
+
+                if not output[
+                    "is_anomaly"
+                ]:
+
+                    continue
+
+
+                LOGGER.info(
+                    (
+                        "ANOMALY | "
+                        "model=%s | "
+                        "ue=%s | "
+                        "sample=%s | "
+                        "p=%.6f | "
+                        "score=%.6f"
+                    ),
+                    output[
+                        "model"
+                    ],
+                    output[
+                        "ue_key"
+                    ],
+                    output[
+                        "sample_id"
+                    ],
+                    output[
+                        "conformal_p_value"
+                    ],
+                    output[
+                        "anomaly_score"
+                    ],
+                )
+
+
+            # =================================================
+            # PERIODIC LOG
+            # =================================================
+
+            if (
+                processed_windows <= 3
+                or
+                processed_windows % 20 == 0
+            ):
 
                 LOGGER.info(
                     (
                         "WINDOW COMPLETE | "
                         "windows=%d | "
+                        "predictions=%d | "
                         "models=%d | "
                         "ue=%s | "
-                        "sample=%s"
+                        "sample=%s | "
+                        "anomalies=%s"
                     ),
-                    processed_count,
-                    len(outputs_for_window),
+                    processed_windows,
+                    produced_predictions,
+                    len(
+                        available_models
+                    ),
                     gold_record.get(
                         "ue_key"
                     ),
                     gold_record.get(
                         "sample_id"
                     ),
+                    dict(
+                        anomalies_by_model
+                    ),
                 )
-
-
-            for output_record in outputs_for_window:
-
-                if output_record[
-                    "is_anomaly"
-                ]:
-
-                    LOGGER.info(
-                        (
-                            "ANOMALY | "
-                            "model=%s | "
-                            "ue=%s | "
-                            "sample=%s | "
-                            "p=%.6f | "
-                            "score=%.6f"
-                        ),
-                        output_record[
-                            "model"
-                        ],
-                        output_record[
-                            "ue_key"
-                        ],
-                        output_record[
-                            "sample_id"
-                        ],
-                        output_record[
-                            "conformal_p_value"
-                        ],
-                        output_record[
-                            "anomaly_score"
-                        ],
-                    )
 
 
     finally:
 
+
         LOGGER.info(
             (
                 "Stopping worker | "
-                "processed=%d | "
-                "anomalies=%d"
+                "windows=%d | "
+                "predictions=%d | "
+                "anomalies=%s"
             ),
-            processed_count,
-            anomaly_count,
+            processed_windows,
+            produced_predictions,
+            dict(
+                anomalies_by_model
+            ),
         )
 
 
@@ -1344,6 +1444,10 @@ def main() -> int:
 
     return 0
 
+
+# ============================================================
+# ENTRYPOINT
+# ============================================================
 
 if __name__ == "__main__":
 

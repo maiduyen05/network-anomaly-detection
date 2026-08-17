@@ -148,6 +148,7 @@ nifi/database_repository/
 data/raw/*
 data/export/*
 data/runtime-smoke-01/*
+data/runtime-three-model-smoke/*
 
 # Smoke data được generate lại bởi script.
 data/smoke-gold/*

@@ -133,6 +133,30 @@ st.markdown(
         color: {COLOR_TEXT};
     }}
 
+    /* Căn lại sidebar để các phần có khoảng cách đồng đều. */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+        gap: 0.85rem;
+    }}
+
+    [data-testid="stSidebar"] h2 {{
+        margin-top: 0;
+        margin-bottom: 0.15rem;
+    }}
+
+    [data-testid="stSidebar"] h3 {{
+        margin-top: 0.35rem;
+        margin-bottom: 0.10rem;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stAlert"] {{
+        margin-top: 0.10rem;
+        margin-bottom: 0.20rem;
+    }}
+
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
+        margin-top: -0.20rem;
+    }}
+
 
     /* ========================================================
        KPI CARDS
@@ -342,6 +366,47 @@ else:
     MODEL_METADATA = {}
 
 
+# ------------------------------------------------------------
+# Danh sách model lấy trực tiếp từ production bundle.
+#
+# Fallback về MixedTransformer chỉ để dashboard vẫn khởi động
+# nếu metadata tạm thời chưa có.
+# ------------------------------------------------------------
+
+DEPLOYMENT = MODEL_METADATA.get(
+    "deployment",
+    {},
+)
+
+MODELS_METADATA = MODEL_METADATA.get(
+    "models",
+    {},
+)
+
+AVAILABLE_MODELS = list(
+    DEPLOYMENT.get(
+        "available_models",
+        MODELS_METADATA.keys(),
+    )
+)
+
+if not AVAILABLE_MODELS:
+
+    AVAILABLE_MODELS = [
+        "MixedTransformer"
+    ]
+
+
+DEFAULT_MODEL = DEPLOYMENT.get(
+    "default_model",
+    AVAILABLE_MODELS[0],
+)
+
+if DEFAULT_MODEL not in AVAILABLE_MODELS:
+
+    DEFAULT_MODEL = AVAILABLE_MODELS[0]
+
+
 # ============================================================
 # BUFFER
 # ============================================================
@@ -372,122 +437,98 @@ if "selected_ue" not in st.session_state:
 
 if "selected_model" not in st.session_state:
 
-    deployment = (
-        MODEL_METADATA.get(
-            "deployment",
-            {},
-        )
-    )
-
-    models_metadata = (
-        MODEL_METADATA.get(
-            "models",
-            {},
-        )
-    )
-
-    available_models = list(
-        deployment.get(
-            "available_models",
-            models_metadata.keys(),
-        )
-    )
-
-    if not available_models:
-        available_models = ["MixedTransformer"]
-
-    st.session_state.selected_model = deployment.get(
-        "default_model",
-        available_models[0],
+    st.session_state.selected_model = (
+        DEFAULT_MODEL
     )
 
 
 # ============================================================
 # SIDEBAR
 # ============================================================
+#
+# Giữ nguyên các nội dung hiện có:
+#   - trạng thái hệ thống
+#   - chọn mô hình
+#   - chọn ngưỡng
+#   - mức cảnh báo
+#
+# Chỉ sắp xếp lại thứ tự và khoảng cách để sidebar cân đối hơn.
+# ============================================================
 
 with st.sidebar:
+
+    # --------------------------------------------------------
+    # HEADER + STATUS
+    # --------------------------------------------------------
 
     st.header(
         "📡 Giám sát thuê bao"
     )
-
-    deployment = (
-        MODEL_METADATA.get(
-            "deployment",
-            {},
-        )
-    )
-
-    models_metadata = (
-        MODEL_METADATA.get(
-            "models",
-            {},
-        )
-    )
-
-    available_models = list(
-        deployment.get(
-            "available_models",
-            models_metadata.keys(),
-        )
-    )
-
-    if not available_models:
-        available_models = ["MixedTransformer"]
-
-    default_model = deployment.get(
-        "default_model",
-        available_models[0],
-    )
-
-    if default_model in available_models:
-        default_model_index = available_models.index(default_model)
-    else:
-        default_model_index = 0
-
-    st.subheader(
-        "Mô hình phát hiện"
-    )
-
-    selected_model = st.selectbox(
-        label="Chọn mô hình",
-        options=available_models,
-        index=default_model_index,
-        format_func=lambda model_key: MODEL_DISPLAY_NAMES.get(
-            model_key,
-            model_key,
-        ),
-    )
-
-    if (
-        "last_selected_model" not in st.session_state
-        or st.session_state.last_selected_model != selected_model
-    ):
-        st.session_state.last_selected_model = selected_model
-        st.session_state.selected_model = selected_model
-        st.session_state.selected_ue = "__ALL__"
 
     st.success(
         "Hệ thống đang hoạt động"
     )
 
 
+    # --------------------------------------------------------
+    # MODEL
+    # --------------------------------------------------------
+
     st.subheader(
-        "Ngưỡng phát hiện"
+        "Mô hình"
     )
 
+    default_model_index = (
+        AVAILABLE_MODELS.index(
+            st.session_state.selected_model
+        )
+        if st.session_state.selected_model in AVAILABLE_MODELS
+        else AVAILABLE_MODELS.index(
+            DEFAULT_MODEL
+        )
+    )
+
+    selected_model = st.selectbox(
+        label="Mô hình",
+        options=AVAILABLE_MODELS,
+        index=default_model_index,
+        format_func=lambda model_key: (
+            MODEL_DISPLAY_NAMES.get(
+                model_key,
+                model_key,
+            )
+        ),
+        label_visibility="collapsed",
+    )
+
+    # Nếu đổi model:
+    #   - dashboard chuyển toàn bộ KPI/chart/UE sang model mới;
+    #   - reset UE filter để tránh giữ UE của model trước.
+    if (
+        st.session_state.selected_model
+        !=
+        selected_model
+    ):
+
+        st.session_state.selected_model = (
+            selected_model
+        )
+
+        st.session_state.selected_ue = (
+            "__ALL__"
+        )
+
 
     # --------------------------------------------------------
-    # Dashboard threshold
-    #
-    # Đây là ngưỡng hiển thị/cảnh báo trên dashboard.
-    #
-    # Model output gốc trong Kafka không bị thay đổi.
+    # THRESHOLD
     # --------------------------------------------------------
+
+    st.subheader(
+        "Ngưỡng bất thường"
+    )
 
     display_threshold = st.slider(
-        label="Ngưỡng điểm bất thường",
+        label="Ngưỡng bất thường",
         min_value=0.800,
         max_value=1.000,
         value=0.975,
@@ -497,21 +538,23 @@ with st.sidebar:
             "Gold window có điểm bằng hoặc cao hơn "
             "ngưỡng này sẽ được dashboard đánh dấu cảnh báo."
         ),
+        label_visibility="collapsed",
     )
-
 
     st.caption(
         f"Ngưỡng hiện tại: {display_threshold:.3f}"
     )
 
 
-    st.divider()
+    # --------------------------------------------------------
+    # ALERT LEVELS
+    # --------------------------------------------------------
 
+    st.divider()
 
     st.subheader(
         "Mức cảnh báo"
     )
-
 
     st.markdown(
         """
@@ -1002,7 +1045,7 @@ def render_anomaly_chart(
         chart_df = df.copy()
 
         chart_title = (
-            "Phát hiện bất thường"
+            "Trạng thái của các thuê bao"
         )
 
     else:
