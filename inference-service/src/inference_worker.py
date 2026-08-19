@@ -299,23 +299,23 @@ def load_predictors(
         ] = predictor
 
 
-        LOGGER.info(
-            (
-                "MODEL READY | "
-                "model=%s | "
-                "display=%s | "
-                "seed=%s | "
-                "alpha=%s | "
-                "score_policy=%s | "
-                "forward_passes=%s"
-            ),
-            predictor.model_name,
-            predictor.model_display_name,
-            predictor.selected_seed,
-            predictor.alpha,
-            predictor.score_policy,
-            predictor.forward_passes_per_window,
-        )
+    LOGGER.info(
+        (
+            "MODEL READY | "
+            "model=%s | "
+            "display=%s | "
+            "seed=%s | "
+            "threshold=%.3f | "
+            "score_policy=%s | "
+            "forward_passes=%s"
+        ),
+        predictor.model_name,
+        predictor.model_display_name,
+        predictor.selected_seed,
+        predictor.default_threshold,
+        predictor.score_policy,
+        predictor.forward_passes_per_window,
+    )
 
 
     LOGGER.info(
@@ -708,7 +708,7 @@ def build_output_record(
         # ====================================================
 
         "prediction_schema_version":
-            "anomaly-prediction-v1",
+            "anomaly-prediction-v2",
 
         "prediction_id":
             prediction_id,
@@ -808,13 +808,6 @@ def build_output_record(
                 ]
             ),
 
-        "conformal_p_value":
-            float(
-                prediction[
-                    "conformal_p_value"
-                ]
-            ),
-
         "anomaly_score":
             float(
                 prediction[
@@ -822,23 +815,17 @@ def build_output_record(
                 ]
             ),
 
-        # Không phải probability.
+        # ECDF score trong [0, 1], không phải probability.
         "anomaly_score_is_probability":
             False,
 
-        "alpha":
+        "anomaly_threshold":
             float(
                 prediction[
-                    "alpha"
+                    "anomaly_threshold"
                 ]
             ),
 
-        # Đây là decision gốc của production model:
-        #
-        # p <= alpha
-        #
-        # Dashboard sau này có thể tạo thêm threshold
-        # hiển thị riêng mà không sửa field này.
         "is_anomaly":
             bool(
                 prediction[
@@ -1358,24 +1345,16 @@ def main() -> int:
                         "model=%s | "
                         "ue=%s | "
                         "sample=%s | "
-                        "p=%.6f | "
-                        "score=%.6f"
+                        "raw=%.6f | "
+                        "score=%.6f | "
+                        "threshold=%.3f"
                     ),
-                    output[
-                        "model"
-                    ],
-                    output[
-                        "ue_key"
-                    ],
-                    output[
-                        "sample_id"
-                    ],
-                    output[
-                        "conformal_p_value"
-                    ],
-                    output[
-                        "anomaly_score"
-                    ],
+                    output["model"],
+                    output["ue_key"],
+                    output["sample_id"],
+                    output["raw_score"],
+                    output["anomaly_score"],
+                    output["anomaly_threshold"],
                 )
 
 

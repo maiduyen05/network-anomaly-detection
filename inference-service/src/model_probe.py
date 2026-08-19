@@ -205,8 +205,8 @@ def main() -> int:
     )
 
     print(
-        "Alpha:",
-        predictor.alpha,
+        "Default threshold:",
+        predictor.default_threshold,
     )
 
     print(
@@ -300,9 +300,9 @@ def main() -> int:
     # 7. BASIC PREDICTION VALIDATION
     # --------------------------------------------------------
 
-    p_value = float(
+    raw_score = float(
         prediction[
-            "conformal_p_value"
+            "raw_score"
         ]
     )
 
@@ -312,54 +312,66 @@ def main() -> int:
         ]
     )
 
-    alpha = float(
+    anomaly_threshold = float(
         prediction[
-            "alpha"
+            "anomaly_threshold"
         ]
     )
 
 
-    require(
-        0.0 <= p_value <= 1.0,
-        (
-            "Invalid conformal p-value: "
-            f"{p_value}"
-        ),
-    )
-
+    # --------------------------------------------------------
+    # ECDF SCORE CONTRACT
+    # --------------------------------------------------------
 
     require(
         0.0 <= anomaly_score <= 1.0,
         (
-            "Invalid anomaly score: "
+            "Invalid anomaly_score: "
             f"{anomaly_score}"
         ),
     )
 
-
     require(
-        abs(
-            (
-                p_value
-                +
-                anomaly_score
-            )
-            -
-            1.0
-        )
-        < 1e-9,
+        0.0 <= anomaly_threshold <= 1.0,
         (
-            "Expected anomaly_score = 1 - p_value, "
-            f"got p={p_value}, "
-            f"score={anomaly_score}"
+            "Invalid anomaly_threshold: "
+            f"{anomaly_threshold}"
         ),
     )
 
 
-    expected_flag = (
-        p_value <= alpha
+    # --------------------------------------------------------
+    # OLD CONFORMAL CONTRACT MUST BE GONE
+    # --------------------------------------------------------
+
+    require(
+        "conformal_p_value"
+        not in prediction,
+        (
+            "Old conformal_p_value field "
+            "still exists in prediction"
+        ),
     )
 
+    require(
+        "alpha"
+        not in prediction,
+        (
+            "Old alpha field "
+            "still exists in prediction"
+        ),
+    )
+
+
+    # --------------------------------------------------------
+    # BUSINESS THRESHOLD DECISION
+    # --------------------------------------------------------
+
+    expected_flag = (
+        anomaly_score
+        >=
+        anomaly_threshold
+    )
 
     require(
         bool(
@@ -367,11 +379,44 @@ def main() -> int:
                 "is_anomaly"
             ]
         )
-        == expected_flag,
+        ==
+        expected_flag,
         (
             "is_anomaly inconsistent with "
-            "p_value <= alpha"
+            "anomaly_score >= anomaly_threshold"
         ),
+    )
+
+
+    # --------------------------------------------------------
+    # VERIFY METADATA
+    # --------------------------------------------------------
+
+    score_meta = (
+        predictor
+        .meta[
+            "score"
+        ]
+    )
+
+    require(
+        score_meta[
+            "normalization"
+        ]
+        ==
+        "calibration_empirical_cdf",
+        (
+            "Unexpected score normalization: "
+            f"{score_meta['normalization']!r}"
+        ),
+    )
+
+    require(
+        score_meta[
+            "is_probability"
+        ]
+        is False,
+        "anomaly_score must not be marked as probability",
     )
 
 
@@ -429,14 +474,7 @@ def main() -> int:
 
     print(
         "Raw score           :",
-        prediction[
-            "raw_score"
-        ],
-    )
-
-    print(
-        "Conformal p-value   :",
-        p_value,
+        raw_score,
     )
 
     print(
@@ -445,8 +483,8 @@ def main() -> int:
     )
 
     print(
-        "Alpha               :",
-        alpha,
+        "Threshold           :",
+        anomaly_threshold,
     )
 
     print(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -53,6 +54,146 @@ COLOR_DANGER = "#E96870"
 
 # Border
 COLOR_BORDER = "#D4E4F3"
+
+MAX_CHART_POINTS = 80
+
+NICE_BUCKET_SECONDS = (
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+)
+
+
+def choose_chart_bucket_seconds(
+    first_time: pd.Timestamp,
+    last_time: pd.Timestamp,
+    max_points: int = MAX_CHART_POINTS,
+) -> int:
+    """
+    Chọn bucket thời gian để biểu đồ chỉ còn khoảng max_points điểm.
+    """
+
+    span_seconds = max(
+        (
+            last_time
+            -
+            first_time
+        ).total_seconds(),
+        1.0,
+    )
+
+    required_seconds = (
+        span_seconds
+        /
+        max_points
+    )
+
+    for seconds in NICE_BUCKET_SECONDS:
+
+        if seconds >= required_seconds:
+
+            return seconds
+
+    return int(
+        math.ceil(
+            required_seconds
+            /
+            600
+        )
+        *
+        600
+    )
+
+
+def build_chart_display_series(
+    chart_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, int]:
+    """
+    Giảm mật độ điểm chỉ để hiển thị, giữ điểm anomaly cao nhất mỗi bucket.
+    """
+
+    if len(chart_df) <= MAX_CHART_POINTS:
+
+        return (
+            chart_df.copy(),
+            0,
+        )
+
+    first_time = (
+        chart_df[
+            "event_datetime"
+        ]
+        .min()
+    )
+
+    last_time = (
+        chart_df[
+            "event_datetime"
+        ]
+        .max()
+    )
+
+    bucket_seconds = (
+        choose_chart_bucket_seconds(
+            first_time,
+            last_time,
+        )
+    )
+
+    work_df = chart_df.copy()
+
+    work_df[
+        "_display_bucket"
+    ] = (
+        work_df[
+            "event_datetime"
+        ]
+        .dt
+        .floor(
+            f"{bucket_seconds}s"
+        )
+    )
+
+    representative_indices = (
+        work_df
+        .groupby(
+            "_display_bucket",
+            sort=True,
+        )[
+            "Điểm"
+        ]
+        .idxmax()
+    )
+
+    display_df = (
+        work_df
+        .loc[
+            representative_indices
+        ]
+        .sort_values(
+            "event_datetime"
+        )
+        .drop(
+            columns=[
+                "_display_bucket"
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+    return (
+        display_df,
+        bucket_seconds,
+    )
 
 
 # ============================================================
@@ -407,6 +548,19 @@ if DEFAULT_MODEL not in AVAILABLE_MODELS:
     DEFAULT_MODEL = AVAILABLE_MODELS[0]
 
 
+DEFAULT_ANOMALY_THRESHOLD = float(
+    MODEL_METADATA
+    .get(
+        "score",
+        {},
+    )
+    .get(
+        "default_threshold",
+        0.975,
+    )
+)
+
+
 # ============================================================
 # BUFFER
 # ============================================================
@@ -531,12 +685,12 @@ with st.sidebar:
         label="Ngưỡng bất thường",
         min_value=0.800,
         max_value=1.000,
-        value=0.975,
+        value=DEFAULT_ANOMALY_THRESHOLD,
         step=0.001,
         format="%.3f",
         help=(
-            "Gold window có điểm bằng hoặc cao hơn "
-            "ngưỡng này sẽ được dashboard đánh dấu cảnh báo."
+            "Cửa sổ có điểm bất thường bằng hoặc cao hơn "
+            "ngưỡng này sẽ được đánh dấu cảnh báo."
         ),
         label_visibility="collapsed",
     )
@@ -1024,7 +1178,7 @@ def render_anomaly_chart(
 
     Mặc định:
         hiển thị toàn bộ Gold window của toàn mạng
-        và nối theo thứ tự thời gian thành một đường.
+        và giảm mật độ điểm chỉ ở tầng hiển thị.
 
     Khi chọn UE:
         chỉ hiển thị Gold window của UE đó.
@@ -1032,7 +1186,7 @@ def render_anomaly_chart(
     threshold vẫn được dùng để xác định:
         display_is_anomaly
 
-    nhưng KHÔNG hiển thị threshold trên biểu đồ.
+    và được vẽ trên biểu đồ như ngưỡng nghiệp vụ.
     """
 
 
@@ -1124,20 +1278,26 @@ def render_anomaly_chart(
         # - điểm cảnh báo
         # ====================================================
 
-        legend1, legend2 = st.columns(
-            2
+        legend1, legend2, legend3 = st.columns(
+            3
         )
 
         with legend1:
 
             st.markdown(
-                "🔵 **Điểm số bất thường**"
+                "🔵 **Điểm bất thường theo thời gian**"
             )
 
         with legend2:
 
             st.markdown(
-                "🔴 **Điểm cảnh báo**"
+                "🔴 **Cửa sổ vượt ngưỡng**"
+            )
+
+        with legend3:
+
+            st.markdown(
+                "🟡 **Ngưỡng nghiệp vụ**"
             )
 
 
@@ -1227,6 +1387,22 @@ def render_anomaly_chart(
             )
         )
 
+        display_df, bucket_seconds = (
+            build_chart_display_series(
+                chart_df
+            )
+        )
+
+        if bucket_seconds > 0:
+
+            st.caption(
+                (
+                    f"Biểu đồ được rút gọn theo khoảng "
+                    f"{bucket_seconds} giây để dễ quan sát. "
+                    "KPI và cảnh báo vẫn được tính trên toàn bộ dữ liệu."
+                )
+            )
+
 
         chart_df[
             "Thời gian"
@@ -1262,12 +1438,8 @@ def render_anomaly_chart(
 
         if first_time == last_time:
 
-            display_end = (
-                last_time
-                +
-                pd.Timedelta(
-                    seconds=20
-                )
+            padding = pd.Timedelta(
+                seconds=10
             )
 
         else:
@@ -1282,14 +1454,38 @@ def render_anomaly_chart(
                 pd.Timedelta(
                     seconds=5
                 ),
-                span * 0.05,
+                span * 0.03,
             )
 
-            display_end = (
-                last_time
-                +
-                padding
+        display_start = (
+            first_time
+            -
+            padding
+        )
+
+        display_end = (
+            last_time
+            +
+            padding
+        )
+
+        time_span = (
+            last_time
+            -
+            first_time
+        )
+
+        time_format = (
+            "%H:%M"
+            if
+            time_span
+            >=
+            pd.Timedelta(
+                minutes=10
             )
+            else
+            "%H:%M:%S"
+        )
 
 
         # ====================================================
@@ -1303,15 +1499,16 @@ def render_anomaly_chart(
 
             scale=alt.Scale(
                 domain=[
-                    first_time,
+                    display_start,
                     display_end,
                 ]
             ),
 
             axis=alt.Axis(
-                format="%H:%M:%S",
-                tickCount=6,
+                format=time_format,
+                tickCount=5,
                 labelAngle=0,
+                labelPadding=10,
                 grid=False,
             ),
         )
@@ -1357,51 +1554,20 @@ def render_anomaly_chart(
         #
         # nữa.
         #
-        # Tất cả Gold window được nối thành MỘT đường duy nhất.
+        # Chỉ downsample dữ liệu của line; alert vẫn lấy dữ liệu gốc.
         # ====================================================
 
         score_line = (
             alt.Chart(
-                chart_df
+                display_df
             )
             .mark_line(
                 color=COLOR_PRIMARY,
-                strokeWidth=2.5,
-                opacity=0.85,
+                strokeWidth=2.4,
+                opacity=0.90,
             )
             .encode(
                 x=x_axis,
-                y=y_axis,
-            )
-        )
-
-
-        # ====================================================
-        # 11. NORMAL POINTS
-        # ====================================================
-
-        normal_df = (
-            chart_df[
-                ~chart_df[
-                    "display_is_anomaly"
-                ]
-            ]
-        )
-
-
-        normal_points = (
-            alt.Chart(
-                normal_df
-            )
-            .mark_circle(
-                size=80,
-                color=COLOR_PRIMARY,
-                opacity=0.9,
-            )
-            .encode(
-
-                x=x_axis,
-
                 y=y_axis,
 
                 tooltip=[
@@ -1412,7 +1578,7 @@ def render_anomaly_chart(
 
                     alt.Tooltip(
                         "Điểm:Q",
-                        title="Điểm",
+                        title="Điểm bất thường",
                         format=".3f",
                     ),
                 ],
@@ -1421,7 +1587,7 @@ def render_anomaly_chart(
 
 
         # ====================================================
-        # 12. ALERT POINTS
+        # 11. ALERT POINTS
         # ====================================================
 
         alert_df = (
@@ -1458,8 +1624,13 @@ def render_anomaly_chart(
 
                     alt.Tooltip(
                         "Điểm:Q",
-                        title="Điểm",
+                        title="Điểm bất thường",
                         format=".3f",
+                    ),
+
+                    alt.Tooltip(
+                        "ue_key:N",
+                        title="UE",
                     ),
                 ],
             )
@@ -1467,7 +1638,7 @@ def render_anomaly_chart(
 
 
         # ====================================================
-        # 13. THRESHOLD LINE
+        # 12. THRESHOLD LINE
         # ====================================================
 
         threshold_line = (
@@ -1494,13 +1665,11 @@ def render_anomaly_chart(
 
 
         # ====================================================
-        # 14. FINAL CHART
+        # 13. FINAL CHART
         # ====================================================
 
         chart = (
             score_line
-            +
-            normal_points
             +
             alert_points
             +
@@ -2030,9 +2199,8 @@ def render_live_dashboard() -> None:
 
     numeric_columns = [
         "raw_score",
-        "conformal_p_value",
         "anomaly_score",
-        "alpha",
+        "anomaly_threshold",
     ]
 
 
